@@ -1,28 +1,64 @@
 # PolicyScan
 
-An Agentic Retrieval-Augmented Generation (RAG) assistant for querying and extracting information from health insurance policy documents.
+An Agentic Retrieval-Augmented Generation (RAG) assistant for querying and analyzing insurance policy documents.
+
+Powered by LangChain, Groq (`openai/gpt-oss-120b`), Jina AI Embeddings, FAISS, and Streamlit.
 
 ---
 
-## What Has Been Done So Far
+## Features
 
-1. **Document Loading**: Ingested and processed raw health insurance policy contracts from `data/policy.txt` using LangChain's `TextLoader`.
-2. **Chunking Strategy**: Split the text using `RecursiveCharacterTextSplitter` with a chunk size of 1,000 characters and an overlap of 150 characters to preserve context across boundaries.
-3. **Embedding Generation**: Embedded text chunks using Jina AI's `jina-embeddings-v2-base-en` model.
-4. **Vector Database**: Stored and indexed chunk embeddings locally using Facebook AI Similarity Search (`FAISS`).
-5. **Retriever Tuning**: Configured similarity search with $k=8$ to ensure high recall for specific policy sub-limits (e.g., room rent, ambulance, cataract surgery).
-6. **Tool Integration**: Created a dedicated tool `search_insurance_policy` allowing the model to query the FAISS index on demand.
-7. **Agent Setup**: Configured an autonomous agent using `create_agent` powered by Groq (`openai/gpt-oss-120b`).
-8. **Anti-Hallucination Guardrails**: Implemented system instructions ensuring the agent only answers using retrieved context and refuses to fabricate missing information.
-9. **CLI Interface**: Packaged the end-to-end pipeline into `main.py` with an `ask_insurance_assistant` function for querying.
+- **Modular Architecture:** Organized modules under `insurance_assistant/` handling document loading, text splitting, embeddings, vector indexing, agent execution, tracing, and logging.
+- **Persistent Vector Caching:** FAISS index is generated and saved locally to disk (`data/faiss_index/`), avoiding re-embedding on subsequent runs.
+- **Tool-Assisted Retrieval:** LangChain agent equipped with a `search_insurance_policy` tool to query the FAISS index before answering policy-related questions.
+- **Context-Constrained Prompting:** System prompt instructs the model to answer based on retrieved document context and state when requested information is absent.
+- **LangSmith Tracing:** Integrated tracing configuration for tracking end-to-end request latency, tool execution, and token usage via LangSmith.
+- **Day-Wise Structured Logging:** Centralized logging module configured to write runtime events simultaneously to the console and to date-organized directories (`logs/YYYY-MM-DD/run_*.log`).
+- **Streamlit Web UI:** Chat interface with SVG icons, user/assistant message alignment, and sample query buttons.
+- **CLI Runner:** Script interface for running evaluation questions from the terminal via `main.py`.
 
 ---
 
-## Steps to Set Up and Run
+## Project Structure
+
+```text
+PolicyScan/
+├── app.py                     # Streamlit Web UI application
+├── main.py                    # CLI entry point for batch testing
+├── requirements.txt           # Project dependencies
+├── .env.example               # Environment variables template
+├── .gitignore                 # Git exclusion rules
+├── assets/                    # UI vector icons (assistant & user SVGs)
+│   ├── assistant.svg
+│   └── user.svg
+├── data/                      # Policy documents & local vector stores
+│   ├── apex_health_insurance.txt
+│   └── policy.txt
+├── docs/                      # Technical documentation & engineering guides
+│   ├── 01 Logger.md           # In-depth guide to production logging architecture
+│   └── 02 Tracing.md          # Guide to LLM tracing, observability, and LangSmith
+└── insurance_assistant/       # Core modular RAG package
+    ├── __init__.py            # Package initialization
+    ├── config.py              # Centralized settings & prompt configuration
+    ├── document_loader.py     # Document ingestion (TextLoader)
+    ├── splitter.py            # Recursive character chunking
+    ├── embeddings.py          # Jina AI embedding model wrapper
+    ├── vector_store.py        # FAISS build, persistence, and loading
+    ├── tools.py               # LangChain search tool factory
+    ├── llm.py                 # ChatGroq LLM model initialization
+    ├── agent.py               # LangChain ReAct agent creator
+    ├── logger.py              # Day-wise logging setup (File & Stream handlers)
+    ├── tracing.py             # LangSmith tracing status validation
+    └── pipeline.py            # End-to-end RAG orchestrator
+```
+
+---
+
+## Getting Started
 
 ### 1. Clone the Repository
 ```bash
-git clone https://github.com/vaghela-meetraj/PolicyScan
+git clone https://github.com/vaghela-meetraj/PolicyScan.git
 cd PolicyScan
 ```
 
@@ -42,14 +78,51 @@ python -m venv virtenv
 pip install -r requirements.txt
 ```
 
-### 4. Set Up Environment Variables
-Create a `.env` file in the root directory (refer to `.env.example`):
+### 4. Configure Environment Variables
+Create a `.env` file in the project root based on `.env.example`:
 ```env
+# LLM & Embedding API Keys
 GROQ_API_KEY=your_groq_api_key_here
 JINA_API_KEY=your_jina_api_key_here
+
+# Optional: LangSmith Tracing
+LANGSMITH_TRACING=true
+LANGSMITH_API_KEY=your_langsmith_api_key_here
+LANGSMITH_PROJECT="PolicyScan"
 ```
 
-### 5. Run the Application
+---
+
+## Usage
+
+### Run the Streamlit Web UI
+Launch the interactive chat interface in your browser:
+```powershell
+streamlit run app.py
+```
+Access the interface at `http://localhost:8501`.
+
+### Run the CLI Batch Runner
+Run demo queries in the terminal:
 ```powershell
 python main.py
 ```
+
+---
+
+## Documentation
+
+- **Logging Guide:** For architectural details on handlers, formatters, log levels, and production practices, refer to [01 Logger.md](docs/01%20Logger.md).
+- **Tracing Guide:** For details on end-to-end request journeys, spans, token consumption, and LangSmith integration, refer to [02 Tracing.md](docs/02%20Tracing.md).
+
+---
+
+## Tech Stack
+
+- **Framework:** [LangChain](https://www.langchain.com/)
+- **LLM Engine:** [Groq](https://groq.com/) (`openai/gpt-oss-120b`)
+- **Embeddings:** [Jina AI](https://jina.ai/) (`jina-embeddings-v2-base-en`)
+- **Vector Database:** [FAISS](https://github.com/facebookresearch/faiss)
+- **Observability:** [LangSmith](https://smith.langchain.com/)
+- **Web UI:** [Streamlit](https://streamlit.io/)
+- **Environment Management:** [uv](https://github.com/astral-sh/uv) / `venv`

@@ -1,10 +1,10 @@
 """CLI entry point for running the insurance assistant demo."""
 
-from insurance_assistant.pipeline import ask, build_insurance_assisstant
+from insurance_assistant.pipeline import ask, build_insurance_assistant
 
 def main():
     """Run the insurance assistant pipeline with a set of demo questions."""
-    agent = build_insurance_assisstant()
+    agent = build_insurance_assistant()
     demo_questions = [
         "Hello who are you",
         "What can you do for me?",

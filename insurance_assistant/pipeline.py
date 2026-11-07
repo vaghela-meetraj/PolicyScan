@@ -12,51 +12,47 @@ from insurance_assistant.vector_store import (
 from insurance_assistant.tools import create_search_tool
 from insurance_assistant.llm import get_llm
 from insurance_assistant.agent import create_insurance_agent
+from insurance_assistant.tracing import check_langsmith_tracing
+from insurance_assistant.logger import get_logger
+
+logger = get_logger(__name__)
 
 
 def build_vector_store_for_document(file_path: str = config.data_path):
     """Load an existing vector store or build and persist a new one from the document."""
     if vector_store_exists():
-        print("Vector store index found. Loading existing vector store...")
+        logger.info("Vector store index found. Loading existing vector store from disk")
         return load_vector_store()
 
-    print(f"Loading document from: {file_path}")
+    logger.info("Vector store index not found. Building from document: %s", file_path)
     documents = load_document(file_path)
-
-    print(f"Loaded {len(documents)} document(s). Splitting into chunks...")
     chunks = split_into_chunks(documents)
-
-    print(f"Building vector store for {len(chunks)} chunks...")
     vector_store = build_vector_store(chunks)
-
-    print("Saving vector store to disk...")
     save_vector_store(vector_store)
-    print("Vector store saved successfully.")
+    logger.info("Vector store built and persisted successfully")
 
     return vector_store
 
 
-def build_insurance_assisstant(file_path: str = config.data_path):
+def build_insurance_assistant(file_path: str = config.data_path):
     """Initialize and return the complete insurance assistant agent pipeline."""
-    print("Checking API keys...")
+    logger.info("Initializing insurance assistant pipeline")
     config.check_api_keys()
+    check_langsmith_tracing()
 
     vector_store = build_vector_store_for_document(file_path)
-
-    print("Creating retriever and search tool...")
     retriever = get_retriever(vector_store)
     search_tool = create_search_tool(retriever)
-
-    print("Initializing LLM and agent...")
     llm = get_llm()
     agent = create_insurance_agent(llm, [search_tool])
-    print("Insurance assistant pipeline ready.")
+    logger.info("Insurance assistant pipeline ready")
 
     return agent
 
 
 def ask(agent, question: str) -> str:
     """Send a question to the insurance assistant agent and return the response."""
+    logger.info("Asking assistant question: %s", question)
     response = agent.invoke(
         {
             "messages": [
@@ -67,4 +63,7 @@ def ask(agent, question: str) -> str:
             ]
         }
     )
-    return response["messages"][-1].content
+    answer = response["messages"][-1].content
+    logger.info("Received assistant response (%d characters)", len(answer))
+    logger.info("Received assistant response: %s", answer)
+    return answer

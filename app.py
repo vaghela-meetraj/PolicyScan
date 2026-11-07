@@ -3,7 +3,7 @@
 import os
 import streamlit as st
 from insurance_assistant import config
-from insurance_assistant.pipeline import build_insurance_assisstant, ask
+from insurance_assistant.pipeline import build_insurance_assistant, ask
 
 # Page setup
 st.set_page_config(
@@ -111,7 +111,7 @@ st.markdown(
 # Load agent once across sessions
 @st.cache_resource(show_spinner="Initializing policy assistant...")
 def get_agent():
-    return build_insurance_assisstant()
+    return build_insurance_assistant()
 
 
 # Initialize conversation state
