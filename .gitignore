@@ -9,19 +9,39 @@ ENV/
 .env
 *.env
 !.env.example
+.streamlit/secrets.toml
 
-# Python cache & artifacts
+# Vector Store Indexes & Pickles (Generated at runtime)
+data/faiss_index/
+data/faiss_*/
+*.faiss
+*.pkl
+
+# Python Cache & Bytecode
 __pycache__/
 *.py[cod]
 *$py.class
 *.so
 .pytest_cache/
+.mypy_cache/
+.ruff_cache/
 
-# Jupyter Notebook & checkpoints
+# Jupyter Notebook & Checkpoints
 rag.ipynb
 .ipynb_checkpoints/
 
-# IDE & Editor files
+# IDE & Editor Configuration
 .vscode/
 .idea/
 *.swp
+*.swo
+
+# OS Generated Files
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Logs & Temporary Files
+*.log
+*.tmp
+*.temp

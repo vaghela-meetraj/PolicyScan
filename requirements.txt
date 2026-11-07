@@ -12,6 +12,9 @@ langchain-text-splitters
 ## vector db
 faiss-cpu
 
+## UI
+streamlit
+
 #notebook
 jupyter
 ipykernel
