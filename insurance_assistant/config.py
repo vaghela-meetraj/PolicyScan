@@ -31,6 +31,9 @@ vector_store_path = os.path.join("data", "faiss_index")
 llm_model_name = "openai/gpt-oss-120b"
 embedding_model_name = "jina-embeddings-v2-base-en"
 
+# Guardrails Models
+guardrails_model_name = "openai/gpt-oss-safeguard-20b"
+
 ## Chunks / Text Splitting Configs
 
 chunk_size = 1000
@@ -43,10 +46,11 @@ top_k_results = 5
 ## System Prompt
 
 system_prompt = """
-    You are an assistant for answering questions about insurance policies, you have mastery in english so whenever you give response your sentence framing and choice of words is perfect.
+    You are an assistant for answering questions about insurance policies.
     Respond politely to greetings and questions about who you are.
-    For policy questions, answer using only the provided context; if the information is not in the context, say that you do not know.
-    Keep your response clear, accurate, and concise without making assumptions.
+    Always answer questions strictly using only the provided context. If the requested information is not found in the context, state that you do not know the answer based on the provided documents.
+    Do not use any outside knowledge, assumptions, or information not present in the context.
+    Keep your response clear, accurate, and concise.
     """
 
 def check_api_keys() -> None:

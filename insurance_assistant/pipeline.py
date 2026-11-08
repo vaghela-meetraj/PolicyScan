@@ -13,6 +13,7 @@ from insurance_assistant.tools import create_search_tool
 from insurance_assistant.llm import get_llm
 from insurance_assistant.agent import create_insurance_agent
 from insurance_assistant.tracing import check_langsmith_tracing
+from insurance_assistant import guardrails
 from insurance_assistant.logger import get_logger
 
 logger = get_logger(__name__)
@@ -53,6 +54,13 @@ def build_insurance_assistant(file_path: str = config.data_path):
 def ask(agent, question: str) -> str:
     """Send a question to the insurance assistant agent and return the response."""
     logger.info("Asking assistant question: %s", question)
+
+    # Input guardrail check
+    is_input_safe, input_reason = guardrails.check_input(question)
+    if not is_input_safe:
+        logger.warning("Input blocked by guardrails. Reason: %s", input_reason)
+        return guardrails.REFUSAL_MESSAGE
+
     response = agent.invoke(
         {
             "messages": [
@@ -64,6 +72,13 @@ def ask(agent, question: str) -> str:
         }
     )
     answer = response["messages"][-1].content
+
+    # Output guardrail check
+    is_output_safe, output_reason = guardrails.check_output(answer)
+    if not is_output_safe:
+        logger.warning("Output blocked by guardrails. Reason: %s", output_reason)
+        return guardrails.REFUSAL_MESSAGE
+
     logger.info("Received assistant response (%d characters)", len(answer))
     logger.info("Received assistant response: %s", answer)
     return answer

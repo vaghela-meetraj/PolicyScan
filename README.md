@@ -8,10 +8,11 @@ Powered by LangChain, Groq (`openai/gpt-oss-120b`), Jina AI Embeddings, FAISS, a
 
 ## Features
 
-- **Modular Architecture:** Organized modules under `insurance_assistant/` handling document loading, text splitting, embeddings, vector indexing, agent execution, tracing, and logging.
+- **Modular Architecture:** Organized modules under `insurance_assistant/` handling document loading, text splitting, embeddings, vector indexing, agent execution, safety guardrails, tracing, and logging.
 - **Persistent Vector Caching:** FAISS index is generated and saved locally to disk (`data/faiss_index/`), avoiding re-embedding on subsequent runs.
 - **Tool-Assisted Retrieval:** LangChain agent equipped with a `search_insurance_policy` tool to query the FAISS index before answering policy-related questions.
-- **Context-Constrained Prompting:** System prompt instructs the model to answer based on retrieved document context and state when requested information is absent.
+- **Bidirectional Safety Guardrails:** Dedicated guardrail module (`insurance_assistant/guardrails.py`) running `openai/gpt-oss-safeguard-20b` in JSON mode to evaluate user queries (preventing prompt injections, jailbreaks, and fraud requests) and assistant responses (preventing prompt leaks, credential disclosure, and fraudulent advice).
+- **Strict Context Grounding:** System prompt enforces strict adherence to retrieved document context. Out-of-domain queries or questions lacking document evidence are refused without using extraneous knowledge.
 - **LangSmith Tracing:** Integrated tracing configuration for tracking end-to-end request latency, tool execution, and token usage via LangSmith.
 - **Day-Wise Structured Logging:** Centralized logging module configured to write runtime events simultaneously to the console and to date-organized directories (`logs/YYYY-MM-DD/run_*.log`).
 - **Streamlit Web UI:** Chat interface with SVG icons, user/assistant message alignment, and sample query buttons.
@@ -47,6 +48,7 @@ PolicyScan/
     ├── tools.py               # LangChain search tool factory
     ├── llm.py                 # ChatGroq LLM model initialization
     ├── agent.py               # LangChain ReAct agent creator
+    ├── guardrails.py          # Input and output safety guardrails (JSON policy validation)
     ├── logger.py              # Day-wise logging setup (File & Stream handlers)
     ├── tracing.py             # LangSmith tracing status validation
     └── pipeline.py            # End-to-end RAG orchestrator
@@ -121,6 +123,7 @@ python main.py
 
 - **Framework:** [LangChain](https://www.langchain.com/)
 - **LLM Engine:** [Groq](https://groq.com/) (`openai/gpt-oss-120b`)
+- **Guardrails Engine:** [Groq](https://groq.com/) (`openai/gpt-oss-safeguard-20b`)
 - **Embeddings:** [Jina AI](https://jina.ai/) (`jina-embeddings-v2-base-en`)
 - **Vector Database:** [FAISS](https://github.com/facebookresearch/faiss)
 - **Observability:** [LangSmith](https://smith.langchain.com/)
