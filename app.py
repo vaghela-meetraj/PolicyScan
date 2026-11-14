@@ -182,6 +182,10 @@ with st.sidebar:
                 <code>{policy_filename}</code>
             </div>
             <div class="config-item">
+                <span style="color:#888;">Vector Store</span>
+                <code>Qdrant Cloud</code>
+            </div>
+            <div class="config-item">
                 <span style="color:#888;">LLM</span>
                 <code>{config.llm_model_name}</code>
             </div>

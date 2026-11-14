@@ -16,6 +16,8 @@ data/faiss_index/
 data/faiss_*/
 *.faiss
 *.pkl
+qdrant_storage/
+.qdrant/
 
 # Python Cache & Bytecode
 __pycache__/

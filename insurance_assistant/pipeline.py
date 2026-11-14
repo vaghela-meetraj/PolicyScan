@@ -22,15 +22,15 @@ logger = get_logger(__name__)
 def build_vector_store_for_document(file_path: str = config.data_path):
     """Load an existing vector store or build and persist a new one from the document."""
     if vector_store_exists():
-        logger.info("Vector store index found. Loading existing vector store from disk")
+        logger.info("Qdrant collection '%s' found. Loading existing vector store from Qdrant Cloud", config.QDRANT_COLLECTION_NAME)
         return load_vector_store()
 
-    logger.info("Vector store index not found. Building from document: %s", file_path)
+    logger.info("Qdrant collection '%s' not found. Ingesting from document: %s", config.QDRANT_COLLECTION_NAME, file_path)
     documents = load_document(file_path)
     chunks = split_into_chunks(documents)
     vector_store = build_vector_store(chunks)
-    save_vector_store(vector_store)
-    logger.info("Vector store built and persisted successfully")
+    # save_vector_store(vector_store)  # Legacy FAISS local save; Qdrant persists automatically in the cloud
+    logger.info("Vector store built and indexed in Qdrant Cloud successfully")
 
     return vector_store
 

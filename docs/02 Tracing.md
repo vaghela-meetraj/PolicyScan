@@ -42,7 +42,7 @@ flowchart TD
     AgentSpan --> LLMSpan1[Span: LLM Decision / Tool Selection]
     AgentSpan --> ToolSpan[Span: search_insurance_policy Tool]
     ToolSpan --> EmbedSpan[Span: Query Embedding Generation]
-    ToolSpan --> RetrieverSpan[Span: FAISS Vector Similarity Search]
+    ToolSpan --> RetrieverSpan[Span: Qdrant Vector Similarity Search]
     AgentSpan --> LLMSpan2[Span: Final Response Synthesis]
 ```
 

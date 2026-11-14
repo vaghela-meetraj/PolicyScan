@@ -21,9 +21,13 @@ LANGSMITH_PROJECT= os.getenv("LANGSMITH_PROJECT")
 
 data_path = os.path.join("data", "apex_health_insurance.txt")
 
-## Vector Store
+## Vector Store (FAISS - Legacy local index)
+# vector_store_path = os.path.join("data", "faiss_index")
 
-vector_store_path = os.path.join("data", "faiss_index")
+## Cloud Vector DB (Qdrant Cloud)
+QDRANT_API_KEY = os.getenv("QDRANT_API_KEY")
+QDRANT_URL = os.getenv("QDRANT_URL")
+QDRANT_COLLECTION_NAME = os.getenv("QDRANT_COLLECTION_NAME", "Insurance_Assistant")
 
 ## Models
 # LLM and Embedding Models 
@@ -36,8 +40,8 @@ guardrails_model_name = "openai/gpt-oss-safeguard-20b"
 
 ## Chunks / Text Splitting Configs
 
-chunk_size = 1000
-chunk_overlap = 150
+chunk_size = 500
+chunk_overlap = 75
 
 ## Retrieval Result
 
@@ -61,4 +65,10 @@ def check_api_keys() -> None:
     if not jina_key:
         logger.error("Missing JINA_API_KEY environment variable")
         raise ValueError("Missing JINA API KEY. Please add it in .env file or environment variables.")
+    if not QDRANT_API_KEY:
+        logger.error("Missing QDRANT_API_KEY environment variable")
+        raise ValueError("Missing QDRANT API KEY. Please add it in .env file or environment variables.")
+    if not QDRANT_URL:
+        logger.error("Missing QDRANT_URL environment variable")
+        raise ValueError("Missing QDRANT URL. Please add it in .env file or environment variables.")
     logger.info("API keys validated successfully")
