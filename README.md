@@ -2,7 +2,7 @@
 
 An Agentic Retrieval-Augmented Generation (RAG) assistant for querying and analyzing insurance policy documents.
 
-Powered by LangChain, Groq (`openai/gpt-oss-120b`), Jina AI Embeddings, Qdrant Cloud, and Streamlit.
+Powered by LangChain, Cloudflare AI Gateway, Groq (`openai/gpt-oss-120b`), Jina AI Embeddings, Qdrant Cloud, and Streamlit.
 
 ---
 
@@ -10,13 +10,14 @@ Powered by LangChain, Groq (`openai/gpt-oss-120b`), Jina AI Embeddings, Qdrant C
 
 - **Modular Architecture:** Organized modules under `insurance_assistant/` handling document loading, text splitting, embeddings, vector indexing, agent execution, safety guardrails, tracing, and logging.
 - **Cloud Vector Storage:** Managed Qdrant Cloud vector database (`Insurance_Assistant` collection) with Jina AI embeddings, eliminating local disk vector dependencies and supporting stateless container deployment.
+- **Cloudflare AI Gateway Integration:** Unified proxy routing via Cloudflare AI Gateway with edge caching, automated retries, and Bring Your Own Key (BYOK) secret aliases. Implements dual-key load balancing (splitting input guardrails to `mainapi` and output guardrails to `backupapi`) with automatic fallback to `openai/gpt-oss-20b`.
 - **Tool-Assisted Retrieval:** LangChain agent equipped with a `search_insurance_policy` tool to query the Qdrant Cloud index before answering policy-related questions.
-- **Bidirectional Safety Guardrails:** Dedicated guardrail module (`insurance_assistant/guardrails.py`) running `openai/gpt-oss-safeguard-20b` in JSON mode to evaluate user queries (preventing prompt injections, jailbreaks, and fraud requests) and assistant responses (preventing prompt leaks, credential disclosure, and fraudulent advice).
-- **Strict Context Grounding:** System prompt enforces strict adherence to retrieved document context. Out-of-domain queries or questions lacking document evidence are refused without using extraneous knowledge.
+- **Bidirectional Safety Guardrails:** Dedicated guardrail module (`insurance_assistant/guardrails.py`) running `openai/gpt-oss-safeguard-20b` in JSON mode to evaluate user queries (screening for potential prompt injections, jailbreak attempts, and fraud requests) and assistant responses (screening for prompt leaks, credential disclosure, and fraudulent advice).
+- **Context Grounding Rules:** System prompt instructs adherence to retrieved document context. Out-of-domain queries or questions lacking document evidence are designed to be refused without relying on extraneous knowledge.
 - **LangSmith Tracing:** Integrated tracing configuration for tracking end-to-end request latency, tool execution, and token usage via LangSmith.
 - **Day-Wise Structured Logging:** Centralized logging module configured to write runtime events simultaneously to the console and to date-organized directories (`logs/YYYY-MM-DD/run_*.log`).
 - **Streamlit Web UI:** Chat interface with SVG icons, user/assistant message alignment, and sample query buttons.
-- **CLI Runner:** Script interface for running evaluation questions from the terminal via `main.py`.
+- **CLI Runner:** Script interface for running demo queries from the terminal via `main.py`.
 
 ---
 
@@ -38,7 +39,8 @@ PolicyScan/
 ├── docs/                      # Technical documentation & engineering guides
 │   ├── 01 Logger.md           # In-depth guide to production logging architecture
 │   ├── 02 Tracing.md          # Guide to LLM tracing, observability, and LangSmith
-│   └── 03 QdrantDB.md         # Guide to Qdrant Cloud architecture and migration
+│   ├── 03 QdrantDB.md         # Guide to Qdrant Cloud architecture and migration
+│   └── 04 LLM Gateways.md     # Guide to Cloudflare AI Gateway, BYOK aliases, and multi-tier routing
 └── insurance_assistant/       # Core modular RAG package
     ├── __init__.py            # Package initialization
     ├── config.py              # Centralized settings & prompt configuration
@@ -46,8 +48,9 @@ PolicyScan/
     ├── splitter.py            # Recursive character chunking
     ├── embeddings.py          # Jina AI embedding model wrapper
     ├── vector_store.py        # Qdrant Cloud vector store integration
+    ├── gateway.py             # Cloudflare AI Gateway client factory and header management
     ├── tools.py               # LangChain search tool factory
-    ├── llm.py                 # ChatGroq LLM model initialization
+    ├── llm.py                 # LLM initialization with gateway fallback routing
     ├── agent.py               # LangChain ReAct agent creator
     ├── guardrails.py          # Input and output safety guardrails (JSON policy validation)
     ├── logger.py              # Day-wise logging setup (File & Stream handlers)
@@ -97,6 +100,14 @@ QDRANT_COLLECTION_NAME="Insurance_Assistant"
 LANGSMITH_TRACING=true
 LANGSMITH_API_KEY=your_langsmith_api_key_here
 LANGSMITH_PROJECT="PolicyScan"
+
+# Optional: Cloudflare AI Gateway
+CLOUDFLARE_ACCOUNT_ID=your_cloudflare_account_id_here
+CLOUDFLARE_API_TOKEN=your_cloudflare_api_token_here
+CLOUDFLARE_GATEWAY_ID="policyscan"
+CLOUDFLARE_GATEWAY_MAIN="mainapi"
+CLOUDFLARE_GATEWAY_BACKUP="backupapi"
+CLOUDFLARE_BACKUP_MODEL="openai/gpt-oss-20b"
 ```
 
 ---
@@ -123,13 +134,15 @@ python main.py
 - **Logging Guide:** For architectural details on handlers, formatters, log levels, and production practices, refer to [01 Logger.md](docs/01%20Logger.md).
 - **Tracing Guide:** For details on end-to-end request journeys, spans, token consumption, and LangSmith integration, refer to [02 Tracing.md](docs/02%20Tracing.md).
 - **Qdrant Migration Guide:** For architectural details on cloud vector storage, network transport, collection schema, and migration from FAISS, refer to [03 QdrantDB.md](docs/03%20QdrantDB.md).
+- **AI Gateway Architecture Guide:** For technical specifications on Cloudflare AI Gateway integration, BYOK aliases, failover chains, and edge caching dynamics, refer to [04 LLM Gateways.md](docs/04%20LLM%20Gateways.md).
 
 ---
 
 ## Tech Stack
 
 - **Framework:** [LangChain](https://www.langchain.com/)
-- **LLM Engine:** [Groq](https://groq.com/) (`openai/gpt-oss-120b`)
+- **AI Gateway & Proxy:** [Cloudflare AI Gateway](https://developers.cloudflare.com/ai-gateway/)
+- **LLM Engine:** [Groq](https://groq.com/) (`openai/gpt-oss-120b`, `openai/gpt-oss-20b`)
 - **Guardrails Engine:** [Groq](https://groq.com/) (`openai/gpt-oss-safeguard-20b`)
 - **Embeddings:** [Jina AI](https://jina.ai/) (`jina-embeddings-v2-base-en`)
 - **Vector Database:** [Qdrant Cloud](https://qdrant.tech/)

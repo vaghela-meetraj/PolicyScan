@@ -69,7 +69,7 @@ Spans maintain parent-child relationships. When an agent calls a retrieval tool,
 ### Failure Isolation
 Tracing distinguishes between the two primary failure modes of retrieval-augmented systems:
 - **Retrieval Failures:** The vector store retrieved irrelevant or insufficient context chunks. Tracing reveals the exact text segments supplied to the model, confirming whether required clauses were omitted.
-- **Reasoning Failures:** The retriever identified the correct context chunks, but the language model misinterpreted or ignored the text. Tracing isolates the prompt inputs from model outputs to prove grounding compliance.
+- **Reasoning Failures:** The retriever identified the correct context chunks, but the language model misinterpreted or ignored the text. Tracing isolates the prompt inputs from model outputs to inspect model grounding against retrieved context.
 
 ### Latency Deconstruction
 In multi-component pipelines, tracing provides an exact breakdown of execution time across components:

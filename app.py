@@ -186,6 +186,10 @@ with st.sidebar:
                 <code>Qdrant Cloud</code>
             </div>
             <div class="config-item">
+                <span style="color:#888;">AI Gateway</span>
+                <code>{config.CLOUDFLARE_GATEWAY_ID if config.CLOUDFLARE_ACCOUNT_ID else "Direct"}</code>
+            </div>
+            <div class="config-item">
                 <span style="color:#888;">LLM</span>
                 <code>{config.llm_model_name}</code>
             </div>

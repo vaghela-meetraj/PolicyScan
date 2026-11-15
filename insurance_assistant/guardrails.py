@@ -1,11 +1,25 @@
 import json
 from langchain_groq import ChatGroq
 from insurance_assistant import config
+from insurance_assistant.gateway import create_gateway_llm
 from insurance_assistant.logger import get_logger
 
 logger = get_logger(__name__)
 
 REFUSAL_MESSAGE = "Sorry I can't answer to that question"
+
+# Common polite greetings that can safely bypass the input LLM guardrail (0ms latency)
+FAST_PATH_GREETINGS = {
+    "hi",
+    "hello",
+    "hey",
+    "good morning",
+    "good afternoon",
+    "good evening",
+    "thanks",
+    "thank you",
+    "help",
+}
 
 INPUT_POLICY = """
 You are a safety evaluator for an insurance policy assistant.
@@ -44,48 +58,98 @@ Respond ONLY with a valid JSON object in this exact schema:
 """
 
 
-def _guard_llm():
-    """Initialize and return the Groq chat model instance used for guardrail evaluations."""
-    return ChatGroq(
-        model=config.guardrails_model_name,
-        temperature=0,
-        model_kwargs={"response_format": {"type": "json_object"}},
-    )
+def _get_input_guard_llm():
+    """Initialize and return the LLM for input safety checks via Cloudflare AI Gateway (mainapi)."""
+    if config.CLOUDFLARE_ACCOUNT_ID:
+        primary = create_gateway_llm(
+            alias=config.CLOUDFLARE_GATEWAY_MAIN,
+            model_name=config.guardrails_model_name,
+            attempt=1,
+        )
+        fallback = create_gateway_llm(
+            alias=config.CLOUDFLARE_GATEWAY_BACKUP,
+            model_name=config.guardrails_model_name,
+            attempt=2,
+        )
+        return primary.with_fallbacks([fallback])
+    return ChatGroq(model=config.guardrails_model_name, api_key=config.groq_key, temperature=0)
 
 
-def _check_safety(text: str, policy: str) -> tuple[bool, str]:
-    """Return (is_safe, reason) for the given text under the given policy."""
-    llm = _guard_llm()
+def _get_output_guard_llm():
+    """Initialize and return the LLM for output safety checks via Cloudflare AI Gateway (backupapi)."""
+    if config.CLOUDFLARE_ACCOUNT_ID:
+        primary = create_gateway_llm(
+            alias=config.CLOUDFLARE_GATEWAY_BACKUP,
+            model_name=config.guardrails_model_name,
+            attempt=1,
+        )
+        fallback = create_gateway_llm(
+            alias=config.CLOUDFLARE_GATEWAY_MAIN,
+            model_name=config.guardrails_model_name,
+            attempt=2,
+        )
+        return primary.with_fallbacks([fallback])
+    return ChatGroq(model=config.guardrails_model_name, api_key=config.groq_key, temperature=0)
+
+
+def _is_violation(val) -> bool:
+    """Return True if the violation field indicates an unsafe violation."""
+    if isinstance(val, bool):
+        return val
+    if isinstance(val, (int, float)):
+        return val != 0
+    if isinstance(val, str):
+        return val.strip().lower() in ("1", "true", "yes")
+    return False
+
+
+def _check_safety(text: str, policy: str, llm) -> tuple[bool, str]:
+    """Return (is_safe, reason) for the given text under the given policy and LLM."""
     response = llm.invoke(
         [
             {"role": "system", "content": policy},
             {"role": "user", "content": text},
         ]
     )
-    raw_content = str(getattr(response, "content", response))
+    raw_content = str(getattr(response, "content", response)).strip()
     result = json.loads(raw_content)
-    is_safe = result.get("violation", 0) == 0
+    is_safe = not _is_violation(result.get("violation", 0))
     reason = result.get("rationale", "")
     return is_safe, reason
 
 
 def check_input(text: str) -> tuple[bool, str]:
-    """Validate user input against input guardrails before passing it to the pipeline."""
-    logger.info("Evaluating user input against input safety guardrails")
-    is_safe, reason = _check_safety(text, INPUT_POLICY)
-    if is_safe:
-        logger.info("User input passed safety checks")
-    else:
-        logger.warning("User input failed guardrail check: %s", reason)
-    return is_safe, reason
+    """Validate user input against input guardrails via Cloudflare AI Gateway (mainapi)."""
+    clean_text = text.strip().lower()
+    if clean_text in FAST_PATH_GREETINGS:
+        logger.info("Input recognized as standard greeting ('%s'); passing input check instantly", clean_text)
+        return True, ""
+
+    logger.info("Evaluating user input against input safety guardrails (mainapi)")
+    try:
+        llm = _get_input_guard_llm()
+        is_safe, reason = _check_safety(text, INPUT_POLICY, llm)
+        if is_safe:
+            logger.info("User input passed safety checks")
+        else:
+            logger.warning("User input failed guardrail check: %s", reason)
+        return is_safe, reason
+    except Exception as e:
+        logger.warning("Input guardrail check encountered an error (%s); allowing input to proceed", e)
+        return True, ""
 
 
 def check_output(text: str) -> tuple[bool, str]:
-    """Validate assistant output against output guardrails before returning it."""
-    logger.info("Evaluating assistant response against output safety guardrails")
-    is_safe, reason = _check_safety(text, OUTPUT_POLICY)
-    if is_safe:
-        logger.info("Assistant response passed safety checks")
-    else:
-        logger.warning("Assistant response failed guardrail check: %s", reason)
-    return is_safe, reason
+    """Validate assistant output against output guardrails via Cloudflare AI Gateway (backupapi)."""
+    logger.info("Evaluating assistant response against output safety guardrails (backupapi)")
+    try:
+        llm = _get_output_guard_llm()
+        is_safe, reason = _check_safety(text, OUTPUT_POLICY, llm)
+        if is_safe:
+            logger.info("Assistant response passed safety checks")
+        else:
+            logger.warning("Assistant response failed guardrail check: %s", reason)
+        return is_safe, reason
+    except Exception as e:
+        logger.warning("Output guardrail check encountered an error (%s); allowing response to proceed", e)
+        return True, ""

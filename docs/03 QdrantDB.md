@@ -42,7 +42,7 @@ QdrantClient(
 **Technical Rationale:**
 - **Zero-Dependency Transport:** Standard HTTP REST uses pure HTTPS sockets, avoiding platform-specific C-extensions (`grpc._cython`) that can trigger binary execution blocks under enterprise OS security controls or Python pre-releases.
 - **Firewall & Proxy Compatibility:** Cloud deployments behind standard corporate HTTP proxies or serverless platforms communicate seamlessly over HTTPS port 443 without requiring custom gRPC streaming configurations.
-- **Latency Profile:** For document chunk counts typical in policy analysis (<10,000 vectors), query latency differences between REST and gRPC are sub-millisecond, while operational reliability is substantially higher.
+- **Latency Profile:** For document chunk collections typical in policy analysis, REST provides predictable query performance while avoiding binary dependency conflicts.
 
 ---
 

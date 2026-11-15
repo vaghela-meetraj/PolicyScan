@@ -29,10 +29,18 @@ QDRANT_API_KEY = os.getenv("QDRANT_API_KEY")
 QDRANT_URL = os.getenv("QDRANT_URL")
 QDRANT_COLLECTION_NAME = os.getenv("QDRANT_COLLECTION_NAME", "Insurance_Assistant")
 
+## Cloudflare AI Gateway
+CLOUDFLARE_ACCOUNT_ID = os.getenv("CLOUDFLARE_ACCOUNT_ID")
+CLOUDFLARE_API_TOKEN = os.getenv("CLOUDFLARE_API_TOKEN") or os.getenv("CLOUDFLARE_GATEWAY_TOKEN")
+CLOUDFLARE_GATEWAY_ID = os.getenv("CLOUDFLARE_GATEWAY_ID", "policyscan")
+CLOUDFLARE_GATEWAY_MAIN = os.getenv("CLOUDFLARE_GATEWAY_MAIN", "mainapi")
+CLOUDFLARE_GATEWAY_BACKUP = os.getenv("CLOUDFLARE_GATEWAY_BACKUP", "backupapi")
+
 ## Models
 # LLM and Embedding Models 
 
 llm_model_name = "openai/gpt-oss-120b"
+llm_backup_model_name = os.getenv("CLOUDFLARE_BACKUP_MODEL", "openai/gpt-oss-20b")
 embedding_model_name = "jina-embeddings-v2-base-en"
 
 # Guardrails Models
@@ -71,4 +79,10 @@ def check_api_keys() -> None:
     if not QDRANT_URL:
         logger.error("Missing QDRANT_URL environment variable")
         raise ValueError("Missing QDRANT URL. Please add it in .env file or environment variables.")
+    if CLOUDFLARE_ACCOUNT_ID:
+        logger.info(
+            "Cloudflare AI Gateway enabled (main: %s, backup: %s)",
+            CLOUDFLARE_GATEWAY_MAIN,
+            CLOUDFLARE_GATEWAY_BACKUP,
+        )
     logger.info("API keys validated successfully")
