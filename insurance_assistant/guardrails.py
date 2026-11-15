@@ -59,7 +59,7 @@ Respond ONLY with a valid JSON object in this exact schema:
 
 
 def _get_input_guard_llm():
-    """Initialize and return the LLM for input safety checks via Cloudflare AI Gateway (mainapi)."""
+    """Initialize and return the LLM for input safety checks via Cloudflare AI Gateway."""
     if config.CLOUDFLARE_ACCOUNT_ID:
         primary = create_gateway_llm(
             alias=config.CLOUDFLARE_GATEWAY_MAIN,
@@ -76,7 +76,7 @@ def _get_input_guard_llm():
 
 
 def _get_output_guard_llm():
-    """Initialize and return the LLM for output safety checks via Cloudflare AI Gateway (backupapi)."""
+    """Initialize and return the LLM for output safety checks via Cloudflare AI Gateway."""
     if config.CLOUDFLARE_ACCOUNT_ID:
         primary = create_gateway_llm(
             alias=config.CLOUDFLARE_GATEWAY_BACKUP,
@@ -119,13 +119,13 @@ def _check_safety(text: str, policy: str, llm) -> tuple[bool, str]:
 
 
 def check_input(text: str) -> tuple[bool, str]:
-    """Validate user input against input guardrails via Cloudflare AI Gateway (mainapi)."""
+    """Validate user input against input guardrails via Cloudflare AI Gateway."""
     clean_text = text.strip().lower()
     if clean_text in FAST_PATH_GREETINGS:
         logger.info("Input recognized as standard greeting ('%s'); passing input check instantly", clean_text)
         return True, ""
 
-    logger.info("Evaluating user input against input safety guardrails (mainapi)")
+    logger.info("Evaluating user input against input safety guardrails")
     try:
         llm = _get_input_guard_llm()
         is_safe, reason = _check_safety(text, INPUT_POLICY, llm)
@@ -140,8 +140,8 @@ def check_input(text: str) -> tuple[bool, str]:
 
 
 def check_output(text: str) -> tuple[bool, str]:
-    """Validate assistant output against output guardrails via Cloudflare AI Gateway (backupapi)."""
-    logger.info("Evaluating assistant response against output safety guardrails (backupapi)")
+    """Validate assistant output against output guardrails via Cloudflare AI Gateway."""
+    logger.info("Evaluating assistant response against output safety guardrails")
     try:
         llm = _get_output_guard_llm()
         is_safe, reason = _check_safety(text, OUTPUT_POLICY, llm)

@@ -1,6 +1,6 @@
 # Cloudflare AI Gateway Architecture and Multi-Tier LLM Routing
 
-This document specifies the technical architecture, security protocols, routing dynamics, and edge caching mechanisms for the LLM gateway subsystem in PolicyScan, powered by Cloudflare AI Gateway and Groq LPUs.
+This document specifies the technical architecture, security protocols, routing dynamics, and edge caching mechanisms for the LLM gateway subsystem, powered by Cloudflare AI Gateway and Groq LPUs.
 
 ---
 
@@ -22,25 +22,25 @@ flowchart TD
     FP -->|"Match (hi, hello)"| Pass["Instant Safe (0ms)"]
     FP -->|"No Match"| IG["Input Guardrail (openai/gpt-oss-safeguard-20b)"]
 
-    subgraph CF ["Cloudflare AI Gateway (Gateway ID: policyscan)"]
-        IG -->|"Header: cf-aig-byok-alias: mainapi"| CF_Main["Main Key Proxy & Edge Cache"]
-        CF_Main -.->|"Failover (429/5xx)"| CF_Backup["Backup Key Proxy (backupapi)"]
+    subgraph CF ["Cloudflare AI Gateway (Gateway ID: <gateway-id>)"]
+        IG -->|"Header: cf-aig-byok-alias: <primary-alias>"| CF_Main["Main Key Proxy & Edge Cache"]
+        CF_Main -.->|"Failover (429/5xx)"| CF_Backup["Backup Key Proxy (<backup-alias>)"]
     end
 
     Pass --> RAG["RAG Agent Retrieval & Context Assembly"]
     CF_Main -->|"Safe"| RAG
 
     subgraph LLM_Routing ["Dual-Tier LLM Routing"]
-        RAG -->|"Primary Attempt (mainapi)"| LLM_120B["openai/gpt-oss-120b"]
-        LLM_120B -.->|"Fallback Attempt (backupapi)"| LLM_20B["openai/gpt-oss-20b"]
+        RAG -->|"Primary Attempt (<primary-alias>)"| LLM_120B["openai/gpt-oss-120b"]
+        LLM_120B -.->|"Fallback Attempt (<backup-alias>)"| LLM_20B["openai/gpt-oss-20b"]
     end
 
     LLM_120B --> OG["Output Guardrail (openai/gpt-oss-safeguard-20b)"]
     LLM_20B --> OG
 
-    subgraph CF_OG ["Cloudflare AI Gateway (policyscan)"]
-        OG -->|"Header: cf-aig-byok-alias: backupapi"| CF_Backup_OG["Backup Key Proxy & Edge Cache"]
-        CF_Backup_OG -.->|"Failover"| CF_Main_OG["Main Key Proxy (mainapi)"]
+    subgraph CF_OG ["Cloudflare AI Gateway (<gateway-id>)"]
+        OG -->|"Header: cf-aig-byok-alias: <backup-alias>"| CF_Backup_OG["Backup Key Proxy & Edge Cache"]
+        CF_Backup_OG -.->|"Failover"| CF_Main_OG["Main Key Proxy (<primary-alias>)"]
     end
 
     CF_Backup_OG -->|"Approved"| Display["Client Presentation via Streamlit"]
@@ -59,15 +59,15 @@ https://gateway.ai.cloudflare.com/v1/{CLOUDFLARE_ACCOUNT_ID}/{CLOUDFLARE_GATEWAY
 ```
 
 In PolicyScan:
-- **`CLOUDFLARE_ACCOUNT_ID`:** Unique Cloudflare account identifier.
-- **`CLOUDFLARE_GATEWAY_ID`:** The gateway instance name (`policyscan`).
+- **`CLOUDFLARE_ACCOUNT_ID`:** Unique Cloudflare account identifier configured in `.env`.
+- **`CLOUDFLARE_GATEWAY_ID`:** User-defined gateway slug configured in the Cloudflare dashboard.
 - **Provider Target:** `/groq` indicates that requests are forwarded to Groq LPUs.
 
 ### BYOK (Bring Your Own Key) Security Model
 
 Rather than embedding raw Groq API keys in local environment variables across application containers, PolicyScan uses Cloudflare's **BYOK Secret Vault**:
 - Multiple Groq API keys are stored securely inside the Cloudflare AI Gateway dashboard as encrypted secrets.
-- Each key is assigned an identifier called an **Alias** (`mainapi` and `backupapi`).
+- Each key is assigned a user-defined identifier called an **Alias** (e.g. `<primary-alias>` and `<backup-alias>`).
 - At request time, the application passes the alias in an HTTP header. Cloudflare injects the corresponding decrypted provider key at the edge before dispatching the request to Groq.
 
 ### Header Specification
@@ -77,7 +77,7 @@ The gateway module ([gateway.py](file:///d:/Github%20Projects/PolicyScan/insuran
 | Header Name | Type | Description |
 | :--- | :--- | :--- |
 | `cf-aig-authorization` | String | `Bearer {CLOUDFLARE_API_TOKEN}` authenticating the application with Cloudflare. |
-| `cf-aig-byok-alias` | String | Key alias (`mainapi` or `backupapi`) instructing Cloudflare which stored Groq key to inject. |
+| `cf-aig-byok-alias` | String | Key alias instructing Cloudflare which stored Groq key to inject. |
 | `cf-aig-collect-log-payload` | Boolean | `false` ensures raw user query text is not retained in unencrypted gateway logs. |
 | `cf-aig-metadata` | JSON String | Telemetry metadata tagging the application name (`PolicyScan`), alias, and attempt number. |
 | `Authorization` | String | Set to an empty string (`""`) to prevent client libraries from transmitting extraneous credentials. |
@@ -94,22 +94,22 @@ PolicyScan operates three distinct LLM workflows per user inquiry:
 To prevent quota exhaustion on provider free tiers (specifically the 2,000 TPM limit on safeguard models), traffic is distributed across two separate key aliases:
 
 ```
-+-----------------------------------------------------------------------------+
-|                               Traffic Matrix                                |
-+-----------------------+-------------------+--------------------+------------+
-| Component             | Primary Alias     | Model Engine       | Failover   |
-+-----------------------+-------------------+--------------------+------------+
-| Input Safety Rail     | mainapi           | gpt-oss-safeguard  | backupapi  |
-| Primary RAG Assistant | mainapi           | openai/gpt-oss-120b| backupapi  |
-| Fallback RAG Model    | backupapi         | openai/gpt-oss-20b | None       |
-| Output Safety Rail    | backupapi         | gpt-oss-safeguard  | mainapi    |
-+-----------------------+-------------------+--------------------+------------+
++-----------------------------------------------------------------------------------------+
+|                                     Traffic Matrix                                      |
++-----------------------+---------------------+--------------------+----------------------+
+| Component             | Primary Alias       | Model Engine       | Failover             |
++-----------------------+---------------------+--------------------+----------------------+
+| Input Safety Rail     | <primary-alias>     | gpt-oss-safeguard  | <backup-alias>       |
+| Primary RAG Assistant | <primary-alias>     | openai/gpt-oss-120b| <backup-alias>       |
+| Fallback RAG Model    | <backup-alias>      | openai/gpt-oss-20b | None                 |
+| Output Safety Rail    | <backup-alias>      | gpt-oss-safeguard  | <primary-alias>      |
++-----------------------+---------------------+--------------------+----------------------+
 ```
 
 ### Technical Benefits of This Partitioning:
 
-1. **Dual-Key Token Balancing:** The input rail consumes tokens against `mainapi`, while the output rail consumes tokens against `backupapi`. This distributes the guardrail request volume across two distinct provider keys.
-2. **Asymmetric Failover:** If `mainapi` hits a temporary provider rate limit (HTTP 429/413) during input verification, the request immediately cascades to `backupapi`. Similarly, if `backupapi` is constrained during output verification, it cascades to `mainapi`.
+1. **Dual-Key Token Balancing:** The input rail consumes tokens against the primary alias, while the output rail consumes tokens against the backup alias. This distributes the guardrail request volume across two distinct provider keys.
+2. **Asymmetric Failover:** If the primary alias hits a temporary provider rate limit (HTTP 429/413) during input verification, the request immediately cascades to the backup alias. Similarly, if the backup alias is constrained during output verification, it cascades to the primary alias.
 3. **Model Tiering for Cost and Availability:** The primary agent uses the flagship 120B parameter model (`openai/gpt-oss-120b`). If the 120B model is temporarily rate-limited or experiencing high upstream latency, the fallback automatically switches to the lightweight 20B model (`openai/gpt-oss-20b`).
 
 ---
@@ -127,7 +127,7 @@ sequenceDiagram
     participant Groq as Groq Inference Engine
 
     User->>App: Submits question ("What is waiting period?")
-    App->>Edge: POST /groq/chat/completions (mainapi)
+    App->>Edge: POST /groq/chat/completions (<primary-alias>)
     
     alt Cache Hit (Question asked previously)
         Edge-->>App: HTTP 200 OK (Cached Response)
@@ -193,16 +193,16 @@ return main_llm.with_fallbacks([backup_llm])
 
 ### 3. Split Guardrail Verification (`insurance_assistant/guardrails.py`)
 
-Input checks route through `mainapi` (falling back to `backupapi`), while output checks route through `backupapi` (falling back to `mainapi`):
+Input checks route through the primary alias (falling back to the backup alias), while output checks route through the backup alias (falling back to the primary alias):
 
 ```python
-# Input Guardrail: mainapi primary, backupapi failover
+# Input Guardrail: primary alias first, backup failover
 def _get_input_guard_llm():
     primary = create_gateway_llm(alias=config.CLOUDFLARE_GATEWAY_MAIN, ...)
     fallback = create_gateway_llm(alias=config.CLOUDFLARE_GATEWAY_BACKUP, ...)
     return primary.with_fallbacks([fallback])
 
-# Output Guardrail: backupapi primary, mainapi failover
+# Output Guardrail: backup alias first, primary failover
 def _get_output_guard_llm():
     primary = create_gateway_llm(alias=config.CLOUDFLARE_GATEWAY_BACKUP, ...)
     fallback = create_gateway_llm(alias=config.CLOUDFLARE_GATEWAY_MAIN, ...)
@@ -219,9 +219,9 @@ The following parameters in `.env` govern gateway operations:
 | :--- | :--- | :--- | :--- |
 | `CLOUDFLARE_ACCOUNT_ID` | Yes (for gateway) | None | Cloudflare account identifier. |
 | `CLOUDFLARE_API_TOKEN` | Yes (for gateway) | None | Cloudflare API token with AI Gateway read/write permissions. |
-| `CLOUDFLARE_GATEWAY_ID` | Yes (for gateway) | `policyscan` | Gateway slug configured in Cloudflare Dashboard. |
-| `CLOUDFLARE_GATEWAY_MAIN` | No | `mainapi` | BYOK key alias for primary inference and input guardrails. |
-| `CLOUDFLARE_GATEWAY_BACKUP` | No | `backupapi` | BYOK key alias for backup inference and output guardrails. |
+| `CLOUDFLARE_GATEWAY_ID` | Yes (for gateway) | None | Gateway slug configured in Cloudflare Dashboard. |
+| `CLOUDFLARE_GATEWAY_MAIN` | No | `main-key` | BYOK key alias for primary inference and input guardrails. |
+| `CLOUDFLARE_GATEWAY_BACKUP` | No | `backup-key` | BYOK key alias for backup inference and output guardrails. |
 | `CLOUDFLARE_BACKUP_MODEL` | No | `openai/gpt-oss-20b` | Model identifier utilized when primary model fails over. |
 
 ---
@@ -230,9 +230,8 @@ The following parameters in `.env` govern gateway operations:
 
 ### Error Code 2001: "Please configure AI Gateway in the Cloudflare dashboard"
 - **Cause:** The `CLOUDFLARE_GATEWAY_ID` does not match an existing gateway slug in the Cloudflare account, or a key alias was passed in the URL path instead of the `cf-aig-byok-alias` header.
-- **Remedy:** Ensure `CLOUDFLARE_GATEWAY_ID="policyscan"` and verify that the gateway is active in the Cloudflare dashboard.
+- **Remedy:** Verify that `CLOUDFLARE_GATEWAY_ID` matches your configured slug and verify that the gateway is active in the Cloudflare dashboard.
 
 ### HTTP 413 Payload Too Large / HTTP 429 Too Many Requests
 - **Cause:** Upstream Groq TPM limit exceeded on preview models.
-- **Remedy:** Mitigated automatically by the gateway's cross-key failover (`mainapi` &rarr; `backupapi`) and edge caching. Ensure edge caching is enabled in the Cloudflare AI Gateway dashboard settings.
-
+- **Remedy:** Mitigated automatically by the gateway's cross-key failover and edge caching. Ensure edge caching is enabled in the Cloudflare AI Gateway dashboard settings.

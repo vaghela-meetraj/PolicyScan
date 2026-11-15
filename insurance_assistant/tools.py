@@ -13,6 +13,8 @@ def create_search_tool(retriever):
         logger.info("Executing policy search for query: %s", question)
         matching_chunks = retriever.invoke(question)
         logger.info("Retrieved %d matching chunk(s)", len(matching_chunks))
+        if not matching_chunks:
+            return "No relevant policy clauses or coverage details found in the policy documents."
         return "\n\n".join(chunk.page_content for chunk in matching_chunks)
 
     return search_insurance_policy

@@ -10,7 +10,7 @@ Powered by LangChain, Cloudflare AI Gateway, Groq (`openai/gpt-oss-120b`), Jina 
 
 - **Modular Architecture:** Organized modules under `insurance_assistant/` handling document loading, text splitting, embeddings, vector indexing, agent execution, safety guardrails, tracing, and logging.
 - **Cloud Vector Storage:** Managed Qdrant Cloud vector database (`Insurance_Assistant` collection) with Jina AI embeddings, eliminating local disk vector dependencies and supporting stateless container deployment.
-- **Cloudflare AI Gateway Integration:** Unified proxy routing via Cloudflare AI Gateway with edge caching, automated retries, and Bring Your Own Key (BYOK) secret aliases. Implements dual-key load balancing (splitting input guardrails to `mainapi` and output guardrails to `backupapi`) with automatic fallback to `openai/gpt-oss-20b`.
+- **Cloudflare AI Gateway Integration:** Unified proxy routing via Cloudflare AI Gateway with edge caching, automated retries, and Bring Your Own Key (BYOK) secret aliases. Implements dual-key load balancing (splitting input guardrails to the primary key alias and output guardrails to the backup key alias) with automatic fallback to `openai/gpt-oss-20b`.
 - **Tool-Assisted Retrieval:** LangChain agent equipped with a `search_insurance_policy` tool to query the Qdrant Cloud index before answering policy-related questions.
 - **Bidirectional Safety Guardrails:** Dedicated guardrail module (`insurance_assistant/guardrails.py`) running `openai/gpt-oss-safeguard-20b` in JSON mode to evaluate user queries (screening for potential prompt injections, jailbreak attempts, and fraud requests) and assistant responses (screening for prompt leaks, credential disclosure, and fraudulent advice).
 - **Context Grounding Rules:** System prompt instructs adherence to retrieved document context. Out-of-domain queries or questions lacking document evidence are designed to be refused without relying on extraneous knowledge.
@@ -104,9 +104,9 @@ LANGSMITH_PROJECT="PolicyScan"
 # Optional: Cloudflare AI Gateway
 CLOUDFLARE_ACCOUNT_ID=your_cloudflare_account_id_here
 CLOUDFLARE_API_TOKEN=your_cloudflare_api_token_here
-CLOUDFLARE_GATEWAY_ID="policyscan"
-CLOUDFLARE_GATEWAY_MAIN="mainapi"
-CLOUDFLARE_GATEWAY_BACKUP="backupapi"
+CLOUDFLARE_GATEWAY_ID="your_gateway_id_here"
+CLOUDFLARE_GATEWAY_MAIN="your_primary_key_alias"
+CLOUDFLARE_GATEWAY_BACKUP="your_backup_key_alias"
 CLOUDFLARE_BACKUP_MODEL="openai/gpt-oss-20b"
 ```
 

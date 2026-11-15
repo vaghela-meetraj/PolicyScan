@@ -28,7 +28,7 @@ def get_llm():
             attempt=2,
         )
 
-        # RAG fallback: mainapi (120b) -> backupapi (20b)
+        # RAG fallback: primary alias (120b) -> backup alias (20b)
         return main_llm.with_fallbacks([backup_llm])
 
     logger.info("Initializing direct Groq LLM with model: %s", config.llm_model_name)
