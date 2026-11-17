@@ -48,3 +48,6 @@ logs/
 *.log
 *.tmp
 *.temp
+
+# cli files
+compare_retrieval.py

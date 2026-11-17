@@ -19,6 +19,7 @@ Powered by LangChain, Cloudflare AI Gateway, Groq (`openai/gpt-oss-120b`), Jina 
 - **LangSmith Tracing:** Integrated tracing configuration for tracking end-to-end request latency, tool execution, and token usage via LangSmith.
 - **Day-Wise Structured Logging:** Centralized logging module configured to write runtime events simultaneously to the console and to date-organized directories (`logs/YYYY-MM-DD/run_*.log`).
 - **Streamlit Web UI:** Chat interface with SVG icons, user/assistant message alignment, and sample query buttons.
+- **Automated Quality Evaluation:** Integrated LLM-as-a-judge evaluation suite (`insurance_assistant/evaluation.py` and `evaluate.py`) powered by `openevals` and LangSmith. Automatically provisions test datasets, evaluates agent answers on Correctness and Context Groundedness, and uploads experiment telemetry to LangSmith.
 - **CLI Runner:** Script interface for running demo queries from the terminal via `main.py`.
 
 ---
@@ -29,6 +30,7 @@ Powered by LangChain, Cloudflare AI Gateway, Groq (`openai/gpt-oss-120b`), Jina 
 PolicyScan/
 ├── app.py                     # Streamlit Web UI application
 ├── main.py                    # CLI entry point for batch testing
+├── evaluate.py                # CLI runner for LangSmith correctness & groundedness evals
 ├── requirements.txt           # Project dependencies
 ├── .env.example               # Environment variables template
 ├── .gitignore                 # Git exclusion rules
@@ -43,7 +45,8 @@ PolicyScan/
 │   ├── 02 Tracing.md          # Guide to LLM tracing, observability, and LangSmith
 │   ├── 03 QdrantDB.md         # Guide to Qdrant Cloud architecture and migration
 │   ├── 04 LLM Gateways.md     # Guide to Cloudflare AI Gateway, BYOK aliases, and multi-tier routing
-│   └── 05 Reranker.md         # Guide to neural cross-encoder re-ranking architecture and latency
+│   ├── 05 Reranker.md         # Guide to neural cross-encoder re-ranking architecture and latency
+│   └── 06 Evaluation.md       # Guide to LLM-as-a-judge evaluation suite and error analysis
 └── insurance_assistant/       # Core modular RAG package
     ├── __init__.py            # Package initialization
     ├── config.py              # Centralized settings & prompt configuration
@@ -59,6 +62,7 @@ PolicyScan/
     ├── guardrails.py          # Input and output safety guardrails (JSON policy validation)
     ├── logger.py              # Day-wise logging setup (File & Stream handlers)
     ├── tracing.py             # LangSmith tracing status validation
+    ├── evaluation.py          # Evaluation harness, test cases, and judge evaluators
     └── pipeline.py            # End-to-end RAG orchestrator
 ```
 
@@ -134,10 +138,10 @@ Run demo queries in the terminal:
 python main.py
 ```
 
-### Run the Retrieval & Re-ranking Comparison Diagnostic
-Compare raw vector search candidates vs cross-encoder re-ranked chunks side-by-side:
+### Run Automated Quality Evaluation
+Run correctness and groundedness evaluations using the Judge LLM and stream results to LangSmith:
 ```powershell
-python compare_retrieval.py "What are the room rent limits and ICU charges?"
+python evaluate.py
 ```
 
 ---

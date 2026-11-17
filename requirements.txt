@@ -22,3 +22,6 @@ ipykernel==7.4.0
 
 ## Gateway
 langchain-openai
+
+## evals
+openevals

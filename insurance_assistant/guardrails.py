@@ -1,4 +1,5 @@
 import json
+import time
 from langchain_groq import ChatGroq
 from insurance_assistant import config
 from insurance_assistant.gateway import create_gateway_llm
@@ -103,23 +104,65 @@ def _is_violation(val) -> bool:
     return False
 
 
+_last_guardrail_call_time = 0.0
+
+
+def _enforce_guardrail_pacing():
+    """Ensure at least GUARDRAIL_PACING_DELAY seconds elapse between calls to protect 3 RPM limit."""
+    global _last_guardrail_call_time
+    min_interval = getattr(config, "GUARDRAIL_PACING_DELAY", 20.5)
+    if min_interval > 0 and _last_guardrail_call_time > 0:
+        elapsed = time.time() - _last_guardrail_call_time
+        if elapsed < min_interval:
+            sleep_needed = min_interval - elapsed
+            logger.info(
+                "Guardrail pacing: sleeping %.1fs to protect 3 RPM limit on %s...",
+                sleep_needed,
+                config.guardrails_model_name,
+            )
+            time.sleep(sleep_needed)
+    _last_guardrail_call_time = time.time()
+
+
 def _check_safety(text: str, policy: str, llm) -> tuple[bool, str]:
-    """Return (is_safe, reason) for the given text under the given policy and LLM."""
-    response = llm.invoke(
-        [
-            {"role": "system", "content": policy},
-            {"role": "user", "content": text},
-        ]
-    )
-    raw_content = str(getattr(response, "content", response)).strip()
-    result = json.loads(raw_content)
-    is_safe = not _is_violation(result.get("violation", 0))
-    reason = result.get("rationale", "")
-    return is_safe, reason
+    """Return (is_safe, reason) for the given text under the given policy and LLM with rate limit protection."""
+    _enforce_guardrail_pacing()
+
+    for attempt in range(1, 6):
+        try:
+            response = llm.invoke(
+                [
+                    {"role": "system", "content": policy},
+                    {"role": "user", "content": text},
+                ]
+            )
+            raw_content = str(getattr(response, "content", response)).strip()
+            result = json.loads(raw_content)
+            is_safe = not _is_violation(result.get("violation", 0))
+            reason = result.get("rationale", "")
+            return is_safe, reason
+        except Exception as e:
+            err_str = str(e).lower()
+            if "429" in err_str or "rate" in err_str or "quota" in err_str or "limit" in err_str or "tpm" in err_str:
+                wait_sec = 25 * attempt
+                logger.warning(
+                    "Guardrail LLM hit rate limit (attempt %d/5): %s. Backing off for %ds...",
+                    attempt,
+                    e,
+                    wait_sec,
+                )
+                time.sleep(wait_sec)
+            else:
+                logger.warning("Guardrail LLM error: %s", e)
+                raise
+    return True, ""
 
 
 def check_input(text: str) -> tuple[bool, str]:
     """Validate user input against input guardrails via Cloudflare AI Gateway."""
+    if not getattr(config, "ENABLE_GUARDRAILS", True):
+        return True, ""
+
     clean_text = text.strip().lower()
     if clean_text in FAST_PATH_GREETINGS:
         logger.info("Input recognized as standard greeting ('%s'); passing input check instantly", clean_text)
@@ -141,6 +184,9 @@ def check_input(text: str) -> tuple[bool, str]:
 
 def check_output(text: str) -> tuple[bool, str]:
     """Validate assistant output against output guardrails via Cloudflare AI Gateway."""
+    if not getattr(config, "ENABLE_GUARDRAILS", True):
+        return True, ""
+
     logger.info("Evaluating assistant response against output safety guardrails")
     try:
         llm = _get_output_guard_llm()

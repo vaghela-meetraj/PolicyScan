@@ -19,7 +19,7 @@ LANGSMITH_PROJECT= os.getenv("LANGSMITH_PROJECT")
 
 ## Data Path
 
-data_path = os.path.join("data", "apex_health_insurance.txt")
+data_path = os.path.join("data", "policy.txt")
 
 ## Vector Store (FAISS - Legacy local index)
 # vector_store_path = os.path.join("data", "faiss_index")
@@ -48,8 +48,19 @@ ENABLE_RERANKING = os.getenv("ENABLE_RERANKING", "true").lower() == "true"
 reranker_model_name = "jina-reranker-v2-base-multilingual"
 top_n_candidates = 15
 
-# Guardrails Models
+# Guardrails Configs
+ENABLE_GUARDRAILS = os.getenv("ENABLE_GUARDRAILS", "true").lower() == "true"
 guardrails_model_name = "openai/gpt-oss-safeguard-20b"
+GUARDRAIL_PACING_DELAY = float(os.getenv("GUARDRAIL_PACING_DELAY", "20.5"))
+
+# LLM Judge & Evaluation Configs
+JUDGE_API_KEY = os.getenv("JUDGE_API_KEY")
+JUDGE_MODEL_NAME = os.getenv("JUDGE_MODEL_NAME", "gemini-3.1-flash-lite")
+JUDGE_BASE_URL = os.getenv("JUDGE_BASE_URL", "https://generativelanguage.googleapis.com/v1beta/openai/")
+EVAL_DATASET_NAME = os.getenv("EVAL_DATASET_NAME", "insurance-policy-qna")
+# Pacing delays to strictly protect Groq 8K TPM and Gemini 15 RPM limits
+EVAL_PACING_DELAY = float(os.getenv("EVAL_PACING_DELAY", "20.0"))
+EVAL_JUDGE_DELAY = float(os.getenv("EVAL_JUDGE_DELAY", "5.0"))
 
 ## Chunks / Text Splitting Configs
 
