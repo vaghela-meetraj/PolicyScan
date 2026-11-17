@@ -10,6 +10,8 @@ Powered by LangChain, Cloudflare AI Gateway, Groq (`openai/gpt-oss-120b`), Jina 
 
 - **Modular Architecture:** Organized modules under `insurance_assistant/` handling document loading, text splitting, embeddings, vector indexing, agent execution, safety guardrails, tracing, and logging.
 - **Cloud Vector Storage:** Managed Qdrant Cloud vector database (`Insurance_Assistant` collection) with Jina AI embeddings, eliminating local disk vector dependencies and supporting stateless container deployment.
+- **Two-Stage Neural Re-ranking:** Integrated neural cross-encoder (`jina-reranker-v2-base-multilingual`) in `insurance_assistant/reranker.py`. Retrieves a candidate pool of $N=15$ chunks from Qdrant Cloud, re-ranks using full token-to-token cross-attention, and supplies the top $K=5$ most relevant chunks to the LLM to eliminate false-positive context.
+- **Turn-Based Interaction Lock:** Synchronous conversational state locking in the Streamlit UI (`is_processing`) that disables chat input and action buttons until the current response is received and verified, preventing race conditions and duplicate executions.
 - **Cloudflare AI Gateway Integration:** Unified proxy routing via Cloudflare AI Gateway with edge caching, automated retries, and Bring Your Own Key (BYOK) secret aliases. Implements dual-key load balancing (splitting input guardrails to the primary key alias and output guardrails to the backup key alias) with automatic fallback to `openai/gpt-oss-20b`.
 - **Tool-Assisted Retrieval:** LangChain agent equipped with a `search_insurance_policy` tool to query the Qdrant Cloud index before answering policy-related questions.
 - **Bidirectional Safety Guardrails:** Dedicated guardrail module (`insurance_assistant/guardrails.py`) running `openai/gpt-oss-safeguard-20b` in JSON mode to evaluate user queries (screening for potential prompt injections, jailbreak attempts, and fraud requests) and assistant responses (screening for prompt leaks, credential disclosure, and fraudulent advice).
@@ -40,7 +42,8 @@ PolicyScan/
 │   ├── 01 Logger.md           # In-depth guide to production logging architecture
 │   ├── 02 Tracing.md          # Guide to LLM tracing, observability, and LangSmith
 │   ├── 03 QdrantDB.md         # Guide to Qdrant Cloud architecture and migration
-│   └── 04 LLM Gateways.md     # Guide to Cloudflare AI Gateway, BYOK aliases, and multi-tier routing
+│   ├── 04 LLM Gateways.md     # Guide to Cloudflare AI Gateway, BYOK aliases, and multi-tier routing
+│   └── 05 Reranker.md         # Guide to neural cross-encoder re-ranking architecture and latency
 └── insurance_assistant/       # Core modular RAG package
     ├── __init__.py            # Package initialization
     ├── config.py              # Centralized settings & prompt configuration
@@ -48,6 +51,7 @@ PolicyScan/
     ├── splitter.py            # Recursive character chunking
     ├── embeddings.py          # Jina AI embedding model wrapper
     ├── vector_store.py        # Qdrant Cloud vector store integration
+    ├── reranker.py            # Neural cross-encoder re-ranking (Jina Reranker v2)
     ├── gateway.py             # Cloudflare AI Gateway client factory and header management
     ├── tools.py               # LangChain search tool factory
     ├── llm.py                 # LLM initialization with gateway fallback routing
@@ -101,6 +105,9 @@ LANGSMITH_TRACING=true
 LANGSMITH_API_KEY=your_langsmith_api_key_here
 LANGSMITH_PROJECT="PolicyScan"
 
+# Optional: Neural Re-ranking
+ENABLE_RERANKING=true
+
 # Optional: Cloudflare AI Gateway
 CLOUDFLARE_ACCOUNT_ID=your_cloudflare_account_id_here
 CLOUDFLARE_API_TOKEN=your_cloudflare_api_token_here
@@ -127,6 +134,12 @@ Run demo queries in the terminal:
 python main.py
 ```
 
+### Run the Retrieval & Re-ranking Comparison Diagnostic
+Compare raw vector search candidates vs cross-encoder re-ranked chunks side-by-side:
+```powershell
+python compare_retrieval.py "What are the room rent limits and ICU charges?"
+```
+
 ---
 
 ## Documentation
@@ -135,6 +148,7 @@ python main.py
 - **Tracing Guide:** For details on end-to-end request journeys, spans, token consumption, and LangSmith integration, refer to [02 Tracing.md](docs/02%20Tracing.md).
 - **Qdrant Migration Guide:** For architectural details on cloud vector storage, network transport, collection schema, and migration from FAISS, refer to [03 QdrantDB.md](docs/03%20QdrantDB.md).
 - **AI Gateway Architecture Guide:** For technical specifications on Cloudflare AI Gateway integration, BYOK aliases, failover chains, and edge caching dynamics, refer to [04 LLM Gateways.md](docs/04%20LLM%20Gateways.md).
+- **Neural Re-ranking Architecture Guide:** For technical specifications on cross-encoder mechanics, candidate pooling ($N=15 \to K=5$), fail-open fallback, and latency analysis, refer to [05 Reranker.md](docs/05%20Reranker.md).
 
 ---
 
@@ -145,6 +159,7 @@ python main.py
 - **LLM Engine:** [Groq](https://groq.com/) (`openai/gpt-oss-120b`, `openai/gpt-oss-20b`)
 - **Guardrails Engine:** [Groq](https://groq.com/) (`openai/gpt-oss-safeguard-20b`)
 - **Embeddings:** [Jina AI](https://jina.ai/) (`jina-embeddings-v2-base-en`)
+- **Neural Re-ranker:** [Jina AI](https://jina.ai/) (`jina-reranker-v2-base-multilingual`)
 - **Vector Database:** [Qdrant Cloud](https://qdrant.tech/)
 - **Observability:** [LangSmith](https://smith.langchain.com/)
 - **Web UI:** [Streamlit](https://streamlit.io/)

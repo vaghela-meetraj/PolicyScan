@@ -51,7 +51,7 @@ def build_insurance_assistant(file_path: str = config.data_path):
     return agent
 
 
-def ask(agent, question: str) -> str:
+def ask(agent, question: str, chat_history: list = None) -> str:
     """Send a question to the insurance assistant agent and return the response."""
     logger.info("Asking assistant question: %s", question)
 
@@ -61,16 +61,14 @@ def ask(agent, question: str) -> str:
         logger.warning("Input blocked by guardrails. Reason: %s", input_reason)
         return guardrails.REFUSAL_MESSAGE
 
-    response = agent.invoke(
-        {
-            "messages": [
-                {
-                    "role": "user",
-                    "content": question,
-                }
-            ]
-        }
-    )
+    messages = []
+    if chat_history:
+        for msg in chat_history:
+            if msg.get("role") in ("user", "assistant") and msg.get("content"):
+                messages.append({"role": msg["role"], "content": msg["content"]})
+    messages.append({"role": "user", "content": question})
+
+    response = agent.invoke({"messages": messages})
     answer = response["messages"][-1].content
 
     # Output guardrail check

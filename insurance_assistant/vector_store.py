@@ -61,7 +61,9 @@ def vector_store_exists() -> bool:
     return exists
 
 
-def get_retriever(vector_store, k: int = config.top_k_results):
-    """Return a retriever configured to fetch the top-k relevant documents."""
-    logger.info("Configuring retriever with top_k=%d", k)
+def get_retriever(vector_store, k: int = None):
+    """Return a retriever configured to fetch the top candidates (pre-rerank)."""
+    if k is None:
+        k = config.top_n_candidates if config.ENABLE_RERANKING else config.top_k_results
+    logger.info("Configuring retriever with candidate k=%d", k)
     return vector_store.as_retriever(search_kwargs={"k": k})

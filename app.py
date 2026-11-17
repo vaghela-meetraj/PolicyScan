@@ -127,6 +127,12 @@ if "messages" not in st.session_state:
         }
     ]
 
+# Check if the assistant is currently processing the latest user query
+is_processing = (
+    len(st.session_state.messages) > 0
+    and st.session_state.messages[-1]["role"] == "user"
+)
+
 # Sidebar navigation & settings
 with st.sidebar:
     st.markdown(
@@ -137,7 +143,7 @@ with st.sidebar:
 
     st.write("")
 
-    if st.button("New Chat", use_container_width=True, type="primary"):
+    if st.button("New Chat", use_container_width=True, type="primary", disabled=is_processing):
         st.session_state.messages = [
             {
                 "role": "assistant",
@@ -162,8 +168,8 @@ with st.sidebar:
     ]
 
     for q in sample_questions:
-        if st.button(q, key=f"btn_{q}", use_container_width=True):
-            st.session_state["pending_input"] = q
+        if st.button(q, key=f"btn_{q}", use_container_width=True, disabled=is_processing):
+            st.session_state.messages.append({"role": "user", "content": q})
             st.rerun()
 
     st.write("")
@@ -198,8 +204,12 @@ with st.sidebar:
                 <code>{config.embedding_model_name}</code>
             </div>
             <div class="config-item">
+                <span style="color:#888;">Re-ranker</span>
+                <code>{config.reranker_model_name if config.ENABLE_RERANKING else "Disabled"}</code>
+            </div>
+            <div class="config-item">
                 <span style="color:#888;">Top-k Results</span>
-                <code>{config.top_k_results}</code>
+                <code>{config.top_k_results} (from {config.top_n_candidates if config.ENABLE_RERANKING else config.top_k_results})</code>
             </div>
         </div>
         """,
@@ -226,25 +236,28 @@ for msg in st.session_state.messages:
     with st.chat_message(msg["role"], avatar=avatar):
         st.markdown(msg["content"])
 
-# Handle user input from chat box or sidebar buttons
-user_input = st.chat_input("Ask a question about your insurance policy...")
-if "pending_input" in st.session_state and st.session_state["pending_input"]:
-    user_input = st.session_state.pop("pending_input")
+# Bottom chat input bar (disabled while assistant is generating response)
+user_input = st.chat_input(
+    "Generating response, please wait..." if is_processing else "Ask a question about your insurance policy...",
+    disabled=is_processing,
+)
 
-if user_input:
-    # User message (right-anchored)
+if user_input and not is_processing:
     st.session_state.messages.append({"role": "user", "content": user_input})
-    with st.chat_message("user", avatar="assets/user.svg"):
-        st.markdown(user_input)
+    st.rerun()
 
-    # Assistant message (left-anchored)
+# Execute generation if a user message is waiting for an assistant response
+if is_processing:
+    pending_query = st.session_state.messages[-1]["content"]
     with st.chat_message("assistant", avatar="assets/assistant.svg"):
         with st.spinner("Searching policy documents..."):
             try:
                 agent = get_agent()
-                response = ask(agent, user_input)
+                history = st.session_state.messages[:-1]
+                response = ask(agent, pending_query, chat_history=history)
             except Exception as e:
                 response = f"An error occurred: {e}"
         st.markdown(response)
 
     st.session_state.messages.append({"role": "assistant", "content": response})
+    st.rerun()

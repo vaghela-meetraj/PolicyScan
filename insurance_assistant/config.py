@@ -43,6 +43,11 @@ llm_model_name = "openai/gpt-oss-120b"
 llm_backup_model_name = os.getenv("CLOUDFLARE_BACKUP_MODEL", "openai/gpt-oss-20b")
 embedding_model_name = "jina-embeddings-v2-base-en"
 
+# Neural Re-ranker Configs
+ENABLE_RERANKING = os.getenv("ENABLE_RERANKING", "true").lower() == "true"
+reranker_model_name = "jina-reranker-v2-base-multilingual"
+top_n_candidates = 15
+
 # Guardrails Models
 guardrails_model_name = "openai/gpt-oss-safeguard-20b"
 
