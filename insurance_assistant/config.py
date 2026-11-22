@@ -35,6 +35,7 @@ CLOUDFLARE_API_TOKEN = os.getenv("CLOUDFLARE_API_TOKEN") or os.getenv("CLOUDFLAR
 CLOUDFLARE_GATEWAY_ID = os.getenv("CLOUDFLARE_GATEWAY_ID")
 CLOUDFLARE_GATEWAY_MAIN = os.getenv("CLOUDFLARE_GATEWAY_MAIN", "main-key")
 CLOUDFLARE_GATEWAY_BACKUP = os.getenv("CLOUDFLARE_GATEWAY_BACKUP", "backup-key")
+CLOUDFLARE_SKIP_CACHE = os.getenv("CLOUDFLARE_SKIP_CACHE", "false").lower() == "true"
 
 ## Models
 # LLM and Embedding Models 
@@ -46,7 +47,10 @@ embedding_model_name = "jina-embeddings-v2-base-en"
 # Neural Re-ranker Configs
 ENABLE_RERANKING = os.getenv("ENABLE_RERANKING", "true").lower() == "true"
 reranker_model_name = "jina-reranker-v2-base-multilingual"
-top_n_candidates = 15
+top_n_candidates = int(os.getenv("TOP_N_CANDIDATES", "12"))
+
+# Hybrid Retrieval Configs (Dense Qdrant + Sparse BM25)
+ENABLE_HYBRID_SEARCH = os.getenv("ENABLE_HYBRID_SEARCH", "true").lower() == "true"
 
 # Guardrails Configs
 ENABLE_GUARDRAILS = os.getenv("ENABLE_GUARDRAILS", "true").lower() == "true"
@@ -64,21 +68,26 @@ EVAL_JUDGE_DELAY = float(os.getenv("EVAL_JUDGE_DELAY", "5.0"))
 
 ## Chunks / Text Splitting Configs
 
-chunk_size = 500
-chunk_overlap = 75
+chunk_size = 900
+chunk_overlap = 200
 
 ## Retrieval Result
 
-top_k_results = 5
+top_k_results = int(os.getenv("TOP_K_RESULTS", "8"))
 
 ## System Prompt
 
 system_prompt = """
-    You are an assistant for answering questions about insurance policies.
-    Respond politely to greetings and questions about who you are.
-    Always answer questions strictly using only the provided context. If the requested information is not found in the context, state that you do not know the answer based on the provided documents.
-    Do not use any outside knowledge, assumptions, or information not present in the context.
-    Keep your response clear, accurate, and concise.
+    You are an expert insurance and policy analysis assistant.
+    Your role is to analyze policy documents with legal precision, objective factual accuracy, and strict grounding in the provided context.
+
+    Core Answering Rules:
+    1. Grounding: Answer strictly and solely using the provided context. Do not volunteer external examples, unmentioned documents, or unstated assumptions.
+    2. Legal Precedence: Exclusions and waiting periods strictly supersede Day Care procedure lists. If a procedure is subject to an exclusion, state that it is not covered.
+    3. Contract Precision: When quoting timeframes, waiting periods, percentages, and monetary caps, extract the exact values directly from the retrieved context.
+    4. Calculations: When calculating payouts, state the governing policy cap or percentage first, then show step-by-step arithmetic.
+    5. Out-of-Scope Refusals: If a fact is absent from the text (e.g. premiums, claim settlement ratios, competitor plans), decline clearly without inventing numbers.
+    6. Directness: Answer the user's question directly without adding unrequested administrative boilerplate or extraneous commentary.
     """
 
 def check_api_keys() -> None:

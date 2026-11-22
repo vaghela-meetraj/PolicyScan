@@ -8,11 +8,17 @@ Results are uploaded to LangSmith as a Dataset + Experiment,
 so quality can be compared across runs.
 """
 
+import os
 import time
 from langchain_openai import ChatOpenAI
 from langsmith import Client
 from openevals.llm import create_llm_as_judge
-from openevals.prompts import CORRECTNESS_PROMPT, RAG_GROUNDEDNESS_PROMPT
+from openevals.prompts import (
+    ANSWER_RELEVANCE_PROMPT,
+    CORRECTNESS_PROMPT,
+    RAG_GROUNDEDNESS_PROMPT,
+    RAG_RETRIEVAL_RELEVANCE_PROMPT,
+)
 
 from insurance_assistant import config
 from insurance_assistant.logger import get_logger
@@ -181,6 +187,74 @@ TEST_CASES = [
         "question": "Is this policy better than Star Health Comprehensive?",
         "answer": "The document cannot support a comparison with another insurer's product. The system should decline to compare and may only describe this policy's own terms.",
     },
+
+    # Policy renewal, cancellation, and bonuses
+    {
+        "question": "What is the Cumulative Bonus rate for a claim-free year, and what is the maximum cumulative bonus allowed under this policy?",
+        "answer": "For each claim-free year renewed without break or within the Grace Period, the Sum Insured is automatically increased by 5%. The maximum cumulative bonus cannot exceed 25% of the Sum Insured in any policy year.",
+    },
+    {
+        "question": "What happens to the accrued Cumulative Bonus if a claim is made during the policy year?",
+        "answer": "If a claim is made under the policy, the Cumulative Bonus gets reduced to Nil at the time of renewal in the renewed policy.",
+    },
+    {
+        "question": "What is the Grace Period for policy renewal and are medical claims during this period covered?",
+        "answer": "The Grace Period is 15 days immediately following the premium due date during which the policy can be renewed without loss of continuity benefits (such as waiting periods and pre-existing disease coverage). However, coverage is not available for any illness, disease, or accident occurring during this period for which no premium was received.",
+    },
+    {
+        "question": "If the insured cancels the policy after two months without making any claim, what percentage of premium is refunded?",
+        "answer": "50%. If the insured cancels by giving at least 15 days written notice and no claim has been made, the short-period refund scale pays 50% for risk periods up to three months (and 75% up to one month, 25% up to six months, and nil after six months).",
+    },
+
+    # Organ donation, domiciliary, and child escort
+    {
+        "question": "Are medical expenses for organ donation covered, and what donor expenses are not paid?",
+        "answer": "Medical expenses for organ extraction from a donor are covered provided the inpatient claim of the insured is accepted, the donor is a blood relative or legally approved donor, and the organ is for the insured's use. The policy does not pay the donor's pre- and post-hospitalisation expenses or any other medical treatment for the donor consequent on organ extraction.",
+    },
+    {
+        "question": "What is the payout limit for Domiciliary Hospitalisation and under what conditions is it covered?",
+        "answer": "Domiciliary Hospitalisation is covered up to 20% of the Sum Insured, maximum INR 20,000 (whichever is less). It requires medical treatment for a period exceeding 3 days for an illness/injury that would normally require hospital care, taken at home because the patient cannot be moved to a hospital or due to lack of accommodation. Certain chronic ailments like asthma, bronchitis, diabetes, hypertension, and cough/cold are not covered.",
+    },
+    {
+        "question": "What is the daily allowance and maximum duration for the child care escort benefit?",
+        "answer": "An attendant escort expense of INR 500 per completed day of hospitalisation is paid for a child below 10 years of age, subject to a maximum of 30 days during the policy period.",
+    },
+
+    # Specific medical conditions & exclusions
+    {
+        "question": "Is dental treatment or surgery covered under this policy, and what is the exception?",
+        "answer": "No. Dental treatment or surgery of any kind is excluded, unless required as a result of Accidental Bodily Injury to natural teeth requiring hospitalisation treatment.",
+    },
+    {
+        "question": "Are cosmetic treatments and plastic surgery covered under this policy?",
+        "answer": "No. Cosmetic or aesthetic treatments of any description, change of life/gender surgery, and Lasik for refractive error are excluded. Plastic surgery is excluded unless necessary for the treatment of an illness or accidental bodily injury.",
+    },
+    {
+        "question": "Does the policy cover the cost of spectacles, contact lenses, or hearing aids?",
+        "answer": "No. The cost of spectacles, contact lenses, hearing aids, crutches, wheelchairs, artificial limbs, dentures, artificial teeth, and all other external appliances and prostheses is excluded.",
+    },
+    {
+        "question": "Is treatment for medical conditions related to HIV or AIDS covered under this policy?",
+        "answer": "No. Any condition directly or indirectly caused by or associated with Human Immunodeficiency Virus (HIV) or AIDS is excluded, as is treatment for any venereal or sexually transmitted disease.",
+    },
+    {
+        "question": "Is vaccination or inoculation covered under this policy?",
+        "answer": "No. Vaccination or inoculation is excluded under the policy, except when administered as part of post-bite treatment for an animal bite.",
+    },
+    {
+        "question": "Is surgery to correct a deviated nasal septum covered under this policy?",
+        "answer": "No. Surgery to correct a deviated septum and hypertrophied turbinate is excluded, unless necessitated by an accidental bodily injury and proved to be the result of an accidental injury.",
+    },
+
+    # Geographic tiering & legal conditions
+    {
+        "question": "I have Plan C with normal residential location in Jaipur (Location C). If I am treated in Mumbai (Location A) with an admissible claim of Rs. 1,00,000, how much will the policy pay?",
+        "answer": "Rs. 70,000. Under Plan C (Rest of India), treatment taken in Location A (Mumbai and Delhi) is paid at 70% of the admissible claim amount, so the insurer pays Rs. 70,000 and the insured bears the remaining 30% (Rs. 30,000).",
+    },
+    {
+        "question": "Can a dispute over claim settlement be referred to arbitration if the insurer has disputed or denied liability entirely?",
+        "answer": "No. Arbitration is only applicable when there is a dispute or difference regarding the quantum (amount) to be paid under the policy where liability is otherwise admitted. No dispute can be referred to arbitration if the insurer has disputed or not accepted liability.",
+    },
 ]
 
 
@@ -224,11 +298,18 @@ def _ensure_dataset(client: Client):
 
 def run_evaluation(experiment_prefix: str = "policyscan-eval"):
     """Upload the dataset (if needed) and run the correctness + groundedness evaluation with rate limit protection."""
+    # Force bypass Cloudflare AI Gateway cache to guarantee live evaluation against updated pipeline
+    config.CLOUDFLARE_SKIP_CACHE = True
+    os.environ["CLOUDFLARE_SKIP_CACHE"] = "true"
+    logger.info("Cloudflare AI Gateway caching bypassed for evaluation (cf-aig-skip-cache=true)")
+
     client = Client()
     dataset = _ensure_dataset(client)
 
     agent = build_insurance_assistant()
-    retriever = get_retriever(load_vector_store())
+    from insurance_assistant.pipeline import get_document_chunks
+    doc_chunks = get_document_chunks()
+    retriever = get_retriever(load_vector_store(), chunks=doc_chunks)
 
     def target(inputs: dict) -> dict:
         """
@@ -240,9 +321,10 @@ def run_evaluation(experiment_prefix: str = "policyscan-eval"):
 
         # Retry with exponential backoff on Groq 8K TPM rate limits
         answer = None
+        context = ""
         for attempt in range(1, 6):
             try:
-                answer = ask(agent, question)
+                answer, context = ask(agent, question, return_context=True)
                 break
             except Exception as e:
                 err_str = str(e).lower()
@@ -262,8 +344,13 @@ def run_evaluation(experiment_prefix: str = "policyscan-eval"):
         if answer is None:
             answer = "Error: RAG pipeline rate limit retry exceeded."
 
-        chunks = retriever.invoke(question)
-        context = "\n\n".join(chunk.page_content for chunk in chunks)
+        if not context:
+            try:
+                chunks = retriever.invoke(question)
+                context = "\n\n".join(chunk.page_content for chunk in chunks)
+            except Exception as e:
+                logger.warning("Retriever fallback failed on '%s': %s", question, e)
+                context = ""
 
         # Inter-case pacing sleep to strictly respect Groq 8K TPM & Gemini 15 RPM limits
         pacing_delay = getattr(config, "EVAL_PACING_DELAY", 20.0)
@@ -288,14 +375,10 @@ def run_evaluation(experiment_prefix: str = "policyscan-eval"):
             try:
                 return correctness_judge(inputs=inputs, outputs=outputs, reference_outputs=reference_outputs, **kwargs)
             except Exception as e:
-                err_str = str(e).lower()
-                if "429" in err_str or "rate" in err_str or "quota" in err_str or "resource" in err_str:
-                    wait_time = 15 * attempt
-                    logger.warning("Correctness evaluator rate limited (attempt %d/5): %s. Waiting %ds...", attempt, e, wait_time)
-                    time.sleep(wait_time)
-                else:
-                    raise
-        return {"key": "correctness", "score": False, "comment": "Evaluation aborted due to repeated rate limits"}
+                wait_time = 15 * attempt
+                logger.warning("Correctness evaluator error (attempt %d/5): %s. Backing off for %ds...", attempt, e, wait_time)
+                time.sleep(wait_time)
+        return {"key": "correctness", "score": False, "comment": "Evaluation aborted due to repeated errors"}
 
     groundedness_judge = create_llm_as_judge(
         prompt=RAG_GROUNDEDNESS_PROMPT,
@@ -305,29 +388,66 @@ def run_evaluation(experiment_prefix: str = "policyscan-eval"):
 
     def groundedness_evaluator(outputs: dict, **kwargs) -> dict:
         """Check the answer is supported by the retrieved context with rate-limit pacing and retry protection."""
-        delay = getattr(config, "EVAL_JUDGE_DELAY", 5.0)
+        delay = getattr(config, "EVAL_JUDGE_DELAY", 3.0)
         if delay > 0:
             time.sleep(delay)
         for attempt in range(1, 6):
             try:
                 return groundedness_judge(outputs={"answer": outputs["answer"]}, context=outputs["context"], **kwargs)
             except Exception as e:
-                err_str = str(e).lower()
-                if "429" in err_str or "rate" in err_str or "quota" in err_str or "resource" in err_str:
-                    wait_time = 15 * attempt
-                    logger.warning("Groundedness evaluator rate limited (attempt %d/5): %s. Waiting %ds...", attempt, e, wait_time)
-                    time.sleep(wait_time)
-                else:
-                    raise
-        return {"key": "groundedness", "score": False, "comment": "Evaluation aborted due to repeated rate limits"}
+                wait_time = 15 * attempt
+                logger.warning("Groundedness evaluator error (attempt %d/5): %s. Backing off for %ds...", attempt, e, wait_time)
+                time.sleep(wait_time)
+        return {"key": "groundedness", "score": False, "comment": "Evaluation aborted due to repeated errors"}
 
-    logger.info("Running evaluation against dataset '%s' with max_concurrency=1", DATASET_NAME)
+    retrieval_judge = create_llm_as_judge(
+        prompt=RAG_RETRIEVAL_RELEVANCE_PROMPT,
+        feedback_key="retrieval_relevance",
+        judge=judge_llm,
+    )
+
+    def retrieval_relevance_evaluator(inputs: dict, outputs: dict, **kwargs) -> dict:
+        """Check the retrieved context contains relevant information for the question."""
+        time.sleep(2.0)
+        for attempt in range(1, 6):
+            try:
+                return retrieval_judge(inputs=inputs, context=outputs["context"], **kwargs)
+            except Exception as e:
+                wait_time = 15 * attempt
+                logger.warning("Retrieval relevance evaluator error (attempt %d/5): %s. Backing off for %ds...", attempt, e, wait_time)
+                time.sleep(wait_time)
+        return {"key": "retrieval_relevance", "score": False, "comment": "Evaluation aborted due to repeated errors"}
+
+    answer_relevance_judge = create_llm_as_judge(
+        prompt=ANSWER_RELEVANCE_PROMPT,
+        feedback_key="answer_relevance",
+        judge=judge_llm,
+    )
+
+    def answer_relevance_evaluator(inputs: dict, outputs: dict, **kwargs) -> dict:
+        """Check the generated answer directly addresses the user question."""
+        time.sleep(2.0)
+        for attempt in range(1, 6):
+            try:
+                return answer_relevance_judge(inputs=inputs, outputs={"answer": outputs["answer"]}, **kwargs)
+            except Exception as e:
+                wait_time = 15 * attempt
+                logger.warning("Answer relevance evaluator error (attempt %d/5): %s. Backing off for %ds...", attempt, e, wait_time)
+                time.sleep(wait_time)
+        return {"key": "answer_relevance", "score": False, "comment": "Evaluation aborted due to repeated errors"}
+
+    logger.info("Running evaluation against dataset '%s' with max_concurrency=1 (4 RAG Triad evaluators)", DATASET_NAME)
     return client.evaluate(
         target,
         data=dataset.name,
-        evaluators=[correctness_evaluator, groundedness_evaluator],
+        evaluators=[
+            correctness_evaluator,
+            groundedness_evaluator,
+            retrieval_relevance_evaluator,
+            answer_relevance_evaluator,
+        ],
         experiment_prefix=experiment_prefix,
-        description="PolicyScan insurance policy assistant correctness + groundedness evaluation",
+        description="PolicyScan RAG Triad evaluation: Correctness, Groundedness, Retrieval Relevance, Answer Relevance",
         max_concurrency=1,
     )
 

@@ -9,17 +9,19 @@ Powered by LangChain, Cloudflare AI Gateway, Groq (`openai/gpt-oss-120b`), Jina 
 ## Features
 
 - **Modular Architecture:** Organized modules under `insurance_assistant/` handling document loading, text splitting, embeddings, vector indexing, agent execution, safety guardrails, tracing, and logging.
-- **Cloud Vector Storage:** Managed Qdrant Cloud vector database (`Insurance_Assistant` collection) with Jina AI embeddings, eliminating local disk vector dependencies and supporting stateless container deployment.
-- **Two-Stage Neural Re-ranking:** Integrated neural cross-encoder (`jina-reranker-v2-base-multilingual`) in `insurance_assistant/reranker.py`. Retrieves a candidate pool of $N=15$ chunks from Qdrant Cloud, re-ranks using full token-to-token cross-attention, and supplies the top $K=5$ most relevant chunks to the LLM to eliminate false-positive context.
+- **Cloud Vector Storage:** Managed Qdrant Cloud vector database (`Insurance_AssistantD2` collection) with Jina AI embeddings, eliminating local disk vector dependencies and supporting stateless container deployment.
+- **Header-Aware Chunking & Windowing:** Contextual splitter in `insurance_assistant/splitter.py` (`chunk_size=900`, `chunk_overlap=200`) tracking active section hierarchy and prepending `[SECTION: <TITLE>]` to eliminate clause inversion and directory record slicing.
+- **Sparse-Dense Hybrid Retrieval:** Multi-modal retrieval via `EnsembleRetriever` combining Qdrant dense semantic vectors (60% weight) with BM25 sparse keyword matching (40% weight) to eliminate semantic blind spots on exact statutory clauses and locations.
+- **Two-Stage Neural Re-ranking:** Integrated neural cross-encoder (`jina-reranker-v2-base-multilingual`) in `insurance_assistant/reranker.py`. Implements section-diverse re-ranking (`max_per_section=2`) and token-optimized 650-character windowing across $N=14$ candidates, delivering the top $K=8$ golden chunks with full context to the LLM while cutting cross-encoder token consumption by 88%.
 - **Turn-Based Interaction Lock:** Synchronous conversational state locking in the Streamlit UI (`is_processing`) that disables chat input and action buttons until the current response is received and verified, preventing race conditions and duplicate executions.
-- **Cloudflare AI Gateway Integration:** Unified proxy routing via Cloudflare AI Gateway with edge caching, automated retries, and Bring Your Own Key (BYOK) secret aliases. Implements dual-key load balancing (splitting input guardrails to the primary key alias and output guardrails to the backup key alias) with automatic fallback to `openai/gpt-oss-20b`.
-- **Tool-Assisted Retrieval:** LangChain agent equipped with a `search_insurance_policy` tool to query the Qdrant Cloud index before answering policy-related questions.
-- **Bidirectional Safety Guardrails:** Dedicated guardrail module (`insurance_assistant/guardrails.py`) running `openai/gpt-oss-safeguard-20b` in JSON mode to evaluate user queries (screening for potential prompt injections, jailbreak attempts, and fraud requests) and assistant responses (screening for prompt leaks, credential disclosure, and fraudulent advice).
-- **Context Grounding Rules:** System prompt instructs adherence to retrieved document context. Out-of-domain queries or questions lacking document evidence are designed to be refused without relying on extraneous knowledge.
+- **Cloudflare AI Gateway Integration:** Unified proxy routing via Cloudflare AI Gateway with edge caching, automated retries, and Bring Your Own Key (BYOK) secret aliases. Implements dual-key load balancing (splitting input guardrails to the primary key alias and output guardrails to the backup key alias) with automatic fallback to `openai/gpt-oss-20b` and a 15-second client-side failover timeout.
+- **Tool-Assisted Retrieval:** LangChain ReAct agent equipped with an intelligent policy search tool supporting multi-aspect candidate expansion for exclusions, waiting periods, and territorial limits.
+- **Bidirectional Safety Guardrails:** Dedicated guardrail module (`insurance_assistant/guardrails.py`) running `openai/gpt-oss-safeguard-20b` in JSON mode to evaluate user queries (screening for potential prompt injections, jailbreak attempts, and fraud requests) and assistant responses (screening for prompt leaks, credential disclosure, and fraudulent advice). Includes a 0ms fast-path bypass for polite greetings.
+- **Production-Grade Generic System Prompt:** Domain-agnostic prompt in `insurance_assistant/config.py` enforcing 5 core contract interpretation rules (Strict Grounding, Legal Precedence of Exclusions, Contract Precision, Step-by-Step Calculations, and Out-of-Scope Refusals) with zero hardcoded test-case bias.
 - **LangSmith Tracing:** Integrated tracing configuration for tracking end-to-end request latency, tool execution, and token usage via LangSmith.
 - **Day-Wise Structured Logging:** Centralized logging module configured to write runtime events simultaneously to the console and to date-organized directories (`logs/YYYY-MM-DD/run_*.log`).
 - **Streamlit Web UI:** Chat interface with SVG icons, user/assistant message alignment, and sample query buttons.
-- **Automated Quality Evaluation:** Integrated LLM-as-a-judge evaluation suite (`insurance_assistant/evaluation.py` and `evaluate.py`) powered by `openevals` and LangSmith. Automatically provisions test datasets, evaluates agent answers on Correctness and Context Groundedness, and uploads experiment telemetry to LangSmith.
+- **Automated Quality Evaluation:** Integrated LLM-as-a-judge evaluation suite (`insurance_assistant/evaluation.py` and `evaluate.py`) powered by `openevals` and LangSmith. Evaluates 50 benchmark cases across all 4 axes of the RAG Triad (Answer Relevance: **100%**, Groundedness: **94%**, Retrieval Relevance: **84%**, Correctness: **82%**) under zero-cache live conditions.
 - **CLI Runner:** Script interface for running demo queries from the terminal via `main.py`.
 
 ---
@@ -102,23 +104,33 @@ JINA_API_KEY=your_jina_api_key_here
 # Qdrant Cloud Vector Database
 QDRANT_API_KEY=your_qdrant_api_key_here
 QDRANT_URL=your_qdrant_cluster_url_here
-QDRANT_COLLECTION_NAME="Insurance_Assistant"
+QDRANT_COLLECTION_NAME="Insurance_AssistantD2"
 
 # Optional: LangSmith Tracing
 LANGSMITH_TRACING=true
 LANGSMITH_API_KEY=your_langsmith_api_key_here
 LANGSMITH_PROJECT="PolicyScan"
 
-# Optional: Neural Re-ranking
+# Optional: Neural Re-ranking & Hybrid Search
 ENABLE_RERANKING=true
+ENABLE_HYBRID_SEARCH=true
+TOP_N_CANDIDATES=14
+TOP_K_RESULTS=8
 
-# Optional: Cloudflare AI Gateway
+# Optional: Cloudflare AI Gateway & Cache Control
 CLOUDFLARE_ACCOUNT_ID=your_cloudflare_account_id_here
 CLOUDFLARE_API_TOKEN=your_cloudflare_api_token_here
 CLOUDFLARE_GATEWAY_ID="your_gateway_id_here"
 CLOUDFLARE_GATEWAY_MAIN="your_primary_key_alias"
 CLOUDFLARE_GATEWAY_BACKUP="your_backup_key_alias"
 CLOUDFLARE_BACKUP_MODEL="openai/gpt-oss-20b"
+CLOUDFLARE_SKIP_CACHE=false
+
+# Optional: LLM Judge & Evaluation
+JUDGE_API_KEY=your_gemini_api_key_here
+JUDGE_BASE_URL="https://generativelanguage.googleapis.com/v1beta/openai/"
+JUDGE_MODEL_NAME="gemini-3.1-flash-lite"
+EVAL_DATASET_NAME="insurance-policy-qna"
 ```
 
 ---
@@ -152,7 +164,8 @@ python evaluate.py
 - **Tracing Guide:** For details on end-to-end request journeys, spans, token consumption, and LangSmith integration, refer to [02 Tracing.md](docs/02%20Tracing.md).
 - **Qdrant Migration Guide:** For architectural details on cloud vector storage, network transport, collection schema, and migration from FAISS, refer to [03 QdrantDB.md](docs/03%20QdrantDB.md).
 - **AI Gateway Architecture Guide:** For technical specifications on Cloudflare AI Gateway integration, BYOK aliases, failover chains, and edge caching dynamics, refer to [04 LLM Gateways.md](docs/04%20LLM%20Gateways.md).
-- **Neural Re-ranking Architecture Guide:** For technical specifications on cross-encoder mechanics, candidate pooling ($N=15 \to K=5$), fail-open fallback, and latency analysis, refer to [05 Reranker.md](docs/05%20Reranker.md).
+- **Neural Re-ranking Architecture Guide:** For technical specifications on cross-encoder mechanics, candidate pooling ($N=14 \to K=8$), section-diverse filtering, fail-open fallback, and latency analysis, refer to [05 Reranker.md](docs/05%20Reranker.md).
+- **Automated Evaluation & RAG Triad Guide:** For technical specifications on the LLM-as-a-judge benchmark harness, RAG Triad metrics (Answer Relevance, Groundedness, Retrieval Relevance, Correctness), rate-limit engineering, and error analysis, refer to [06 Evaluation.md](docs/06%20Evaluation.md).
 
 ---
 

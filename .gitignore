@@ -49,5 +49,11 @@ logs/
 *.tmp
 *.temp
 
-# cli files
+# CLI & Developer Scripts
 compare_retrieval.py
+scripts/
+
+# Evaluation Changes Documentation (local only)
+Eval_Changes.md
+Project_Evolution_and_Architecture_Guide.md
+*.pdf

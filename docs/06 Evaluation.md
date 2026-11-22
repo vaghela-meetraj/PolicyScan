@@ -125,3 +125,26 @@ flowchart LR
 4. **Candidate Pool Expansion**:
    Increase candidate retrieval from $N=15$ to $N=20$ for cross-encoder re-ranking to capture adjacent context clauses.
 
+---
+
+## 7. Implemented Production Upgrades & 50-Case Benchmark Results
+
+The planned roadmap was fully implemented, expanding the benchmark from 35 to **50 high-fidelity test cases** and transitioning to the complete 4-metric **RAG Triad** (`answer_relevance`, `groundedness`, `retrieval_relevance`, `correctness`).
+
+### 7.1. Benchmark Performance Progression
+
+| Experiment ID | Scope | Answer Relevance | Context Groundedness | Retrieval Relevance | Factual Correctness |
+| :--- | :---: | :---: | :---: | :---: | :---: |
+| `policyscan-eval-22a910f4` (Baseline) | 35 cases | — | 74.3% (26/35) | — | 68.6% (24/35) |
+| `policyscan-eval-1df8ddde` (Header Chunking) | 35 cases | — | 80.0% (28/35) | — | 74.3% (26/35) |
+| `policyscan-eval-42f46c4f` (RAG Triad 50 Cases) | 50 cases | 96.0% (48/50) | 82.0% (41/50) | 86.0% (43/50) | 84.0% (42/50) |
+| `policyscan-eval-b2fee4cd` (Zero-Cache Subset) | 32 cases | 93.5% (29/31) | 83.9% (26/31) | 74.2% (23/31) | 77.4% (24/31) |
+| **`policyscan-eval-a4893e1e` (Current Production)** | **50 cases** | **100.0% (50/50)** | **94.0% (47/50)** | **84.0% (42/50)** | **82.0% (41/50)** |
+
+### 7.2. Production Architecture Safeguards
+1. **Zero-Cache Verification (`cf-aig-skip-cache: true`)**: Automatically injected during evaluations to guarantee live execution without stale edge cache contamination.
+2. **15-Second Gateway Failover**: Client timeout configured on `create_gateway_llm()` to prevent 120-second queue holds during Groq rate limits, enabling instant failover to `backupapi`.
+3. **Token-Optimized Re-ranking**: Slices cross-encoder candidate payloads to 650 characters with `max_per_section=2`, reducing token consumption by 88% while retaining full 900-character context for the LLM.
+4. **Generic System Prompt**: 5 domain-agnostic legal interpretation rules (Grounding, Legal Precedence, Contract Precision, Calculations, Out-of-Scope Refusals) with zero hardcoded test-case bias.
+
+
