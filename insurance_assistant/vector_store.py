@@ -67,10 +67,15 @@ def get_hybrid_retriever(
     vector_store,
     chunks: list,
     k: int = None,
-    dense_weight: float = 0.6,
-    sparse_weight: float = 0.4,
+    dense_weight: float = None,
+    sparse_weight: float = None,
 ):
     """Return an EnsembleRetriever combining Qdrant dense vector search with BM25 sparse keyword search."""
+    if dense_weight is None:
+        dense_weight = getattr(config, "dense_weight", 0.6)
+    if sparse_weight is None:
+        sparse_weight = getattr(config, "sparse_weight", 0.4)
+
     if k is None:
         k = config.top_n_candidates if config.ENABLE_RERANKING else config.top_k_results
 

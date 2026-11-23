@@ -18,25 +18,13 @@ def create_search_tool(retriever):
         if not matching_chunks:
             return "No relevant policy clauses or coverage details found in the policy documents."
 
-        # Targeted candidate expansion for territorial and exclusion boundaries (capped to conserve reranker tokens)
-        lower_q = question.lower()
-        if any(w in lower_q for w in ["outside", "abroad", "foreign", "singapore", "country", "international", "travel", "overseas", "territor", "geograph"]):
-            geo_chunks = retriever.invoke("Geographical limits medical surgical treatments taken in India currency")[:3]
-            matching_chunks.extend(geo_chunks)
-
-        if any(w in lower_q for w in ["month", "year", "waiting", "day care", "tonsillectomy", "hernia", "cataract", "joint replacement", "knee", "diabetes", "typhoid", "covered", "payable", "exclusion", "dental", "spectacle", "hearing", "cosmetic", "plastic", "hiv", "aids", "vaccin", "septum"]):
-            excl_chunks = retriever.invoke("Exclusions first year second year third year cover commencement waiting period not covered")[:4]
-            matching_chunks.extend(excl_chunks)
-
-        # Deduplicate candidates and cap candidate depth to conserve Jina reranker tokens
+        # Deduplicate candidates across retriever results
         seen = set()
         unique_chunks = []
         for chunk in matching_chunks:
             if chunk.page_content not in seen:
                 seen.add(chunk.page_content)
                 unique_chunks.append(chunk)
-            if len(unique_chunks) >= 15:
-                break
 
         if config.ENABLE_RERANKING:
             unique_chunks = rerank_documents(question, unique_chunks, top_k=config.top_k_results)

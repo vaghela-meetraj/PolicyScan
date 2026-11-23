@@ -269,6 +269,7 @@ def _get_judge_llm() -> ChatOpenAI:
         model=model_id,
         temperature=0,
         max_retries=6,
+        timeout=20.0,
     )
 
 
@@ -328,10 +329,10 @@ def run_evaluation(experiment_prefix: str = "policyscan-eval"):
                 break
             except Exception as e:
                 err_str = str(e).lower()
-                if "429" in err_str or "rate" in err_str or "limit" in err_str or "tpm" in err_str:
+                if any(k in err_str for k in ["429", "rate", "limit", "tpm", "timeout", "timed out", "connection"]):
                     wait_sec = 25 * attempt
                     logger.warning(
-                        "RAG pipeline hit rate limit on '%s' (attempt %d/5): %s. Backing off for %ds...",
+                        "RAG pipeline hit rate limit or network retry on '%s' (attempt %d/5): %s. Backing off for %ds...",
                         question,
                         attempt,
                         e,

@@ -6,16 +6,16 @@ from insurance_assistant.logger import get_logger
 
 logger = get_logger(__name__)
 
-# Generalized regex pattern matching structural section boundaries in insurance and legal documents
+# Generalized regex pattern matching structural section boundaries in contracts and legal documents
 SECTION_HEADER_PATTERN = re.compile(
     r'(?m)^[ \t]*(?:'
-    r'#+\s+[^\n]+|'  # Markdown headings (# Title, ## Subtitle)
-    r'[0-9]+\.\s+(?:DEFINITIONS?|SCOPE OF COVER|BENEFITS|EXCLUSIONS?|MAJOR EXCLUSIONS?|WAITING PERIODS?|CLAIMS? PROCEDURES?|CONDITIONS?)[ \t]*$|'  # Numbered major headers
-    r'(?:DEFINITIONS|SCOPE OF COVER|BENEFITS|EXCLUSIONS|MAJOR EXCLUSIONS|WAITING PERIODS|General Conditions|GENERAL CONDITIONS)[ \t]*$|'  # Standalone uppercase section titles
-    r'[a-z]\)\s+[A-Za-z0-9\s/&\-]{3,40}(?::|\n|$)|'  # Lettered subsections e.g. a) Due Care, f) Claims Procedures, p) Geographical limits:
-    r'Annexure\s+[A-Za-z0-9\s\-]+'  # Annexures and appendices
-    r')',
-    re.IGNORECASE,
+    r'#{1,6}\s+[^\n]+|'  # Markdown headings (# Title, ## Subtitle)
+    r'(?:Section|Article|Part|Chapter|Clause)\s+[0-9IVXLCDM]+[.:\s\t]+[^\n]+|'  # Formal structural markers (Section 1, Article II)
+    r'[0-9]+\.\s+[A-Z\s/&\-]{4,60}[ \t]*$|'  # Numbered ALL-CAPS major section headers (e.g. 1. TERMS OF COVER)
+    r'(?:[A-Z][A-Z\s/&\-]{3,50}[A-Z]|General Conditions)[ \t]*$|'  # Standalone uppercase section titles (DEFINITIONS, EXCLUSIONS, etc.)
+    r'[a-z]\)\s+[A-Za-z0-9\s/&\-]{3,40}(?::|\n|$)|'  # Lettered legal subsections (a) Due Care, p) Geographical limits:)
+    r'(?:Annexure|Schedule|Appendix|Exhibit)\s+[A-Za-z0-9\s\-]+'  # Annexures, Schedules, Appendices
+    r')'
 )
 
 

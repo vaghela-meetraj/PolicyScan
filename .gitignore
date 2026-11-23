@@ -50,7 +50,6 @@ logs/
 *.temp
 
 # CLI & Developer Scripts
-compare_retrieval.py
 scripts/
 
 # Evaluation Changes Documentation (local only)
